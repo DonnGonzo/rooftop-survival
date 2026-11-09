@@ -51,7 +51,7 @@ public class FarmPlot : MonoBehaviour
         return yield;
     }
 
-    void UpdateVisual()
+    public void UpdateVisual()
     {
         if (cropVisual == null) return;
         cropVisual.localScale = Stage < 0

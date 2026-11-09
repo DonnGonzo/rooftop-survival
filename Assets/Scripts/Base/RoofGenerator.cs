@@ -11,6 +11,8 @@ public class RoofGenerator : MonoBehaviour
     [Header("Scene refs")]
     public Transform roofRoot;
     public Transform playerSpawn;
+    [Tooltip("Optional trigger box; resized to fit the generated roof.")]
+    public BoxCollider zoneCollider;
 
     [Header("Prefabs (drag imported GLB prefabs here; blank = placeholder cubes)")]
     public GameObject planterPrefab;      // should have a FarmPlot component
@@ -58,6 +60,14 @@ public class RoofGenerator : MonoBehaviour
         floor.transform.SetParent(roofRoot, false);
         floor.transform.localScale = new Vector3(w, 1f, d);
         floor.transform.localPosition = new Vector3(0f, -0.5f, 0f);
+        Tint(floor, new Color(0.35f, 0.35f, 0.37f));
+
+        if (zoneCollider != null)
+        {
+            zoneCollider.isTrigger = true;
+            zoneCollider.size = new Vector3(w + 1f, 14f, d + 1f);
+            zoneCollider.center = new Vector3(0f, 6f, 0f);
+        }
 
         if (playerSpawn != null) playerSpawn.localPosition = new Vector3(0f, 0.2f, 0f);
 
@@ -75,6 +85,12 @@ public class RoofGenerator : MonoBehaviour
                 ? clutterPrefabs[rng.Next(clutterPrefabs.Length)] : null;
             Place(prefab, "Clutter", rng, w, d, used, 1.8f);
         }
+    }
+
+    public static void Tint(GameObject go, Color c)
+    {
+        var r = go.GetComponent<Renderer>();
+        if (r != null) r.material.color = c;
     }
 
     void Place(GameObject prefab, string label, System.Random rng, float w, float d, List<Vector2> used, float minDist)
@@ -98,7 +114,25 @@ public class RoofGenerator : MonoBehaviour
                 go = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 go.transform.SetParent(roofRoot, false);
                 go.transform.localScale = new Vector3(1.2f, 0.6f, 1.2f);
-                if (label == "Planter") go.AddComponent<FarmPlot>();
+                if (label == "Planter")
+                {
+                    Tint(go, new Color(0.40f, 0.26f, 0.15f));
+                    var plot = go.AddComponent<FarmPlot>();
+                    var crop = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    Destroy(crop.GetComponent<Collider>());
+                    crop.name = "Crop";
+                    crop.transform.SetParent(go.transform, false);
+                    crop.transform.localPosition = new Vector3(0f, 1.2f, 0f);
+                    crop.transform.localScale = Vector3.one * 0.6f;
+                    Tint(crop, new Color(0.25f, 0.65f, 0.2f));
+                    plot.cropVisual = crop.transform;
+                    plot.UpdateVisual();
+                }
+                else
+                {
+                    go.transform.localScale = new Vector3(1.2f, 0.4f + (float)rng.NextDouble() * 1.2f, 0.9f);
+                    Tint(go, new Color(0.3f, 0.3f, 0.28f));
+                }
             }
             go.name = label;
             go.transform.localPosition = new Vector3(x, 0f, z);
