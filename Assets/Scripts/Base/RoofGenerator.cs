@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 /// <summary>
 /// Builds a random rooftop from the run seed (same seed = same roof). Roof quality (0..1)
@@ -204,9 +205,30 @@ public class RoofGenerator : MonoBehaviour
         return null;
     }
 
+    static Shader litShader;
+
+    /// <summary>Finds a shader that works in the current render pipeline (URP, HDRP or built-in).</summary>
+    static Shader GetLitShader()
+    {
+        if (litShader != null) return litShader;
+        var rp = GraphicsSettings.currentRenderPipeline;
+        if (rp != null && rp.defaultShader != null) litShader = rp.defaultShader;
+        if (litShader == null) litShader = Shader.Find("Universal Render Pipeline/Lit");
+        if (litShader == null) litShader = Shader.Find("HDRP/Lit");
+        if (litShader == null) litShader = Shader.Find("Standard");
+        return litShader;
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetShader() { litShader = null; }
+
     public static void Tint(GameObject go, Color c)
     {
         var r = go.GetComponent<Renderer>();
-        if (r != null) r.material.color = c;
+        if (r == null) return;
+        var m = new Material(GetLitShader());
+        if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
+        if (m.HasProperty("_Color")) m.SetColor("_Color", c);
+        r.sharedMaterial = m;
     }
 }
