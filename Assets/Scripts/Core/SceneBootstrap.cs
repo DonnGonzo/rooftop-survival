@@ -10,7 +10,7 @@ public static class SceneBootstrap
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Init()
     {
-        if (Object.FindFirstObjectByType<GameClock>() != null) return;
+        if (Object.FindAnyObjectByType<GameClock>() != null) return;
 
         // Managers
         var mgr = new GameObject("Managers");
@@ -19,7 +19,7 @@ public static class SceneBootstrap
 
         // Sun
         Light sun = null;
-        foreach (var l in Object.FindObjectsByType<Light>(FindObjectsSortMode.None))
+        foreach (var l in Object.FindObjectsByType<Light>())
             if (l.type == LightType.Directional) { sun = l; break; }
         if (sun == null)
         {

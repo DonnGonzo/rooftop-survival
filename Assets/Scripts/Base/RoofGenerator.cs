@@ -219,16 +219,44 @@ public class RoofGenerator : MonoBehaviour
         return litShader;
     }
 
+    static Material templateMat;
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetShader() { litShader = null; }
+    static void ResetShader() { litShader = null; templateMat = null; }
+
+    /// <summary>
+    /// A material known to render correctly in this project: the one a Polyfork model already uses
+    /// (glTFast's own shader). Falls back to the pipeline default shader if the models are missing.
+    /// </summary>
+    static Material GetTemplate()
+    {
+        if (templateMat != null) return templateMat;
+        var prefab = ModelLibrary.Load("ammo-crate");
+        if (prefab != null)
+        {
+            var r = prefab.GetComponentInChildren<Renderer>(true);
+            if (r != null && r.sharedMaterial != null) templateMat = r.sharedMaterial;
+        }
+        return templateMat;
+    }
 
     public static void Tint(GameObject go, Color c)
     {
         var r = go.GetComponent<Renderer>();
         if (r == null) return;
-        var m = new Material(GetLitShader());
-        if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
-        if (m.HasProperty("_Color")) m.SetColor("_Color", c);
+
+        var t = GetTemplate();
+        var m = t != null ? new Material(t) : new Material(GetLitShader());
+
+        string prop = m.HasProperty("_BaseColor") ? "_BaseColor"
+                    : m.HasProperty("baseColorFactor") ? "baseColorFactor"
+                    : m.HasProperty("_Color") ? "_Color" : null;
+        if (prop != null) m.SetColor(prop, c);
+
+        // plain colour, no texture from the borrowed material
+        if (m.HasProperty("baseColorTexture")) m.SetTexture("baseColorTexture", Texture2D.whiteTexture);
+        if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", Texture2D.whiteTexture);
+
         r.sharedMaterial = m;
     }
 }

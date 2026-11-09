@@ -173,7 +173,7 @@ public class PlayerController : MonoBehaviour
     {
         FarmPlot best = null;
         float bestDist = reach + 1.5f;   // planters are long, measure from the middle
-        foreach (var p in FindObjectsByType<FarmPlot>(FindObjectsSortMode.None))
+        foreach (var p in FindObjectsByType<FarmPlot>())
         {
             float d = Vector3.Distance(transform.position, p.transform.position);
             if (d < bestDist) { best = p; bestDist = d; }
