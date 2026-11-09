@@ -4,14 +4,16 @@ using UnityEngine.SceneManagement;
 /// <summary>Start menu, pause menu, character select, settings and help. Esc opens or closes it during play.</summary>
 public class MainMenu : MonoBehaviour
 {
-    enum Page { Main, Characters, Settings, Help }
+    enum Page { Main, Characters, Settings, Controls, Help }
 
     Page page = Page.Main;
     GUIStyle title, button, text;
     float x, y, w;
+    int capturing = -1;   // index of the GameAction waiting for a new key, or -1
 
     void Update()
     {
+        if (capturing >= 0) return;   // the next key belongs to the rebind, not to the menu
         if (!Inp.Pause()) return;
 
         if (GameState.MenuOpen)
@@ -44,13 +46,44 @@ public class MainMenu : MonoBehaviour
         GUI.Label(new Rect(x, y, w, 24), GameState.HasStarted ? "Paused" : "Survive the city above the ruins", text);
         y += 36;
 
+        if (capturing >= 0) HandleCapture();
+
         switch (page)
         {
             case Page.Main: DrawMain(); break;
             case Page.Characters: DrawCharacters(); break;
             case Page.Settings: DrawSettings(); break;
+            case Page.Controls: DrawControls(); break;
             case Page.Help: DrawHelp(); break;
         }
+    }
+
+    /// <summary>Takes the next key or mouse button as the new binding. Esc cancels.</summary>
+    void HandleCapture()
+    {
+        Event e = Event.current;
+        KeyCode pressed = KeyCode.None;
+        if (e.type == EventType.KeyDown && e.keyCode != KeyCode.None) pressed = e.keyCode;
+        else if (e.type == EventType.MouseDown && e.button <= 2)
+            pressed = e.button == 0 ? KeyCode.Mouse0 : e.button == 1 ? KeyCode.Mouse1 : KeyCode.Mouse2;
+        if (pressed == KeyCode.None) return;
+
+        e.Use();
+        if (pressed == KeyCode.Escape)
+        {
+            capturing = -1;
+            return;
+        }
+        if (!Keybinds.Supported(pressed))
+        {
+            Hud.Toast("That key can't be bound. Try another.");
+            capturing = -1;
+            return;
+        }
+        var action = (GameAction)capturing;
+        Keybinds.Set(action, pressed);
+        Hud.Toast(Keybinds.Labels[capturing] + " is now " + Keybinds.Label(pressed) + ".");
+        capturing = -1;
     }
 
     void DrawMain()
@@ -108,6 +141,7 @@ public class MainMenu : MonoBehaviour
             GameSettings.ShowTutorial = true;
             Tutorial.Reset();
         }
+        if (Btn("Controls")) page = Page.Controls;
         if (Btn("Back"))
         {
             PlayerPrefs.Save();
@@ -115,15 +149,43 @@ public class MainMenu : MonoBehaviour
         }
     }
 
+    /// <summary>Every action with its current key. Click one, then press the new key. Esc cancels.</summary>
+    void DrawControls()
+    {
+        Label("Click an action, then press the key or mouse button to use. Esc cancels.", 36);
+        for (int i = 0; i < Keybinds.Count; i++)
+        {
+            string shown = capturing == i ? "press a key..." : Keybinds.Describe((GameAction)i);
+            if (GUI.Button(new Rect(x, y, w, 30), Keybinds.Labels[i] + "   [" + shown + "]", button))
+                capturing = i;
+            y += 34;
+        }
+        y += 8;
+        if (Btn("Reset controls to defaults"))
+        {
+            Keybinds.ResetAll();
+            Hud.Toast("Controls reset to defaults.");
+        }
+        if (Btn("Back"))
+        {
+            capturing = -1;
+            page = Page.Settings;
+        }
+    }
+
     void DrawHelp()
     {
-        Label("WASD move, Shift sprint, Space jump, mouse look.", 24);
-        Label("E: pick up, plant, water or harvest.   T: place a spike trap (trap kit).", 24);
-        Label("G: rappel down at the roof edge, or climb back up at the base.", 24);
-        Label("Tab: inventory and crafting. Q: use a bandage or food.", 24);
-        Label("Left click: attack. Keep clicking quickly to chain a combo. Right click: heavy swing.", 40);
+        string K(GameAction a) => Keybinds.Describe(a);
+        Label(K(GameAction.Forward) + K(GameAction.Left) + K(GameAction.Back) + K(GameAction.Right) +
+              " move, " + K(GameAction.Sprint) + " sprint, " + K(GameAction.Jump) + " jump, mouse look.", 24);
+        Label(K(GameAction.Interact) + ": pick up, plant, water or harvest.   " + K(GameAction.Build) +
+              ": place a spike trap (trap kit).", 24);
+        Label(K(GameAction.Grapple) + ": rappel down at the roof edge, or climb back up at the base.", 24);
+        Label(K(GameAction.Inventory) + ": inventory and crafting.   " + K(GameAction.Use) + ": use a bandage or food.", 24);
+        Label(K(GameAction.Attack) + ": attack. Keep clicking quickly to chain a combo.   " + K(GameAction.Heavy) +
+              ": heavy swing.   " + K(GameAction.ToggleView) + ": third-person view.", 40);
         Label("Be back on the roof before dusk. Nights 1-10 are safe. Night 11 is when attacks begin.", 40);
-        Label("Esc: pause menu.", 24);
+        Label(K(GameAction.Pause) + ": pause menu. Keys can be changed in Settings > Controls.", 24);
         if (Btn("Back")) page = Page.Main;
     }
 

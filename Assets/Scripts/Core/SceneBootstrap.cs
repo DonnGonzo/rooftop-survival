@@ -102,6 +102,8 @@ public static class SceneBootstrap
         pc.cam = camGo.transform;
         var melee = p.AddComponent<MeleeCombat>();
         melee.cam = camGo.transform;
+        var body = p.AddComponent<PlayerBody>();
+        body.cam = camGo.transform;
 
         // Start frozen behind the menu, unless New Run / a reload asked to skip it
         GameState.Playing = false;

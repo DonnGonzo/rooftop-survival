@@ -13,6 +13,9 @@ public class CameraFeel : MonoBehaviour
     public static void Shake(float amount) { trauma = Mathf.Clamp01(trauma + amount); }
     public static void Kick(float degrees) { kick += degrees; }
 
+    /// <summary>Set by PlayerBody: zero in first person, pulled back behind the player in third person.</summary>
+    public static Vector3 viewOffset;
+
     Camera cam;
     Vector3 baseLocal;
     float baseFov, fovNow;
@@ -62,7 +65,7 @@ public class CameraFeel : MonoBehaviour
         float sy = (Mathf.PerlinNoise(0f, Time.time * 25f) - 0.5f) * 2f * shake * 4f;
         float sz = (Mathf.PerlinNoise(Time.time * 18f, 9f) - 0.5f) * 2f * shake * 2f;
 
-        transform.localPosition = baseLocal + new Vector3(bobX, bobY - landDip, 0f);
+        transform.localPosition = baseLocal + viewOffset + new Vector3(bobX, bobY - landDip, 0f);
         // Pitch comes from PlayerController (positive is down). Kick subtracts so the view rises.
         transform.localRotation = Quaternion.Euler(p.Pitch - kick + sx, sy, sz);
     }
