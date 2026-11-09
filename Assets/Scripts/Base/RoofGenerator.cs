@@ -33,6 +33,13 @@ public class RoofGenerator : MonoBehaviour
         "portable-device-charging-dock-b175a5", "layered-leaf-sleeping-cot-7ddad4", "gravity-water-filter-stack-4a54f5"
     };
 
+    // Barriers that stand along the parapet as cover (Polyfork, CC BY 4.0, see CREDITS.md)
+    static readonly string[] EdgeKeys =
+    {
+        "sandbag-wall-section-7075ee", "palisade-wall-621e29", "czech-hedgehog-d77ae5",
+        "barbed-wire-fence-section-a01906", "skated-jersey-barrier-7f0a04"
+    };
+
     void Start()
     {
         if (RunManager.Instance != null) Generate(RunManager.Instance.Current);
@@ -104,6 +111,11 @@ public class RoofGenerator : MonoBehaviour
         }
         used.Add(new Vector3(fx, fz, 1.4f));
 
+        // Landmark on the far corner, cover along the parapet, then planters and loose clutter in the middle.
+        SpawnLandmark(rng, w, d, used);
+        int cover = Mathf.RoundToInt(Mathf.Lerp(3f, 8f, q));
+        for (int i = 0; i < cover; i++) SpawnEdgeCover(rng, w, d, used);
+
         int planters = Mathf.RoundToInt(Mathf.Lerp(1f, 6f, q));
         for (int i = 0; i < planters; i++) SpawnPlanter(rng, w, d, used);
 
@@ -167,6 +179,49 @@ public class RoofGenerator : MonoBehaviour
         }
         go.name = "Clutter_" + key;
         if (!TryPlace(go.transform, r, rng, w, d, used, 1.2f)) Destroy(go);
+    }
+
+    /// <summary>A water tower on the corner away from the campfire, so the roof has a landmark to find your way by.</summary>
+    void SpawnLandmark(System.Random rng, float w, float d, List<Vector3> used)
+    {
+        var pos = new Vector3(w / 2f - 3.2f, 0f, -d / 2f + 3.2f);
+        var go = ModelLibrary.Spawn("water-tower-on-a-dbc730", roofRoot, pos, (float)rng.NextDouble() * 360f,
+                                    addCollider: true, keepAnimations: false);
+        if (go == null) return;
+        go.name = "Landmark_WaterTower";
+        var lb = ModelLibrary.LocalBounds(go.transform);
+        float r = Mathf.Max(lb.size.x, lb.size.z) * 0.5f * go.transform.localScale.x;
+        used.Add(new Vector3(pos.x, pos.z, r));
+    }
+
+    /// <summary>One barrier against the parapet, turned to face into the roof. Keeps the grapple gap clear.</summary>
+    void SpawnEdgeCover(System.Random rng, float w, float d, List<Vector3> used)
+    {
+        const float inset = 1.8f;
+        int side = rng.Next(4);   // 0 north, 1 south, 2 east, 3 west
+        float t = (float)(rng.NextDouble() * 2.0 - 1.0);
+        Vector3 pos;
+        float yaw;
+        switch (side)
+        {
+            case 0: pos = new Vector3(t * (w / 2f - 2f), 0f, d / 2f - inset); yaw = 180f; break;
+            case 1: pos = new Vector3(t * (w / 2f - 2f), 0f, -d / 2f + inset); yaw = 0f; break;
+            case 2: pos = new Vector3(w / 2f - inset, 0f, t * (d / 2f - 2f)); yaw = 270f; break;
+            default: pos = new Vector3(-w / 2f + inset, 0f, t * (d / 2f - 2f)); yaw = 90f; break;
+        }
+        if (side == 0 && Mathf.Abs(pos.x) < 3.5f) return;   // the grapple gap in the north wall
+
+        foreach (var u in used)
+        {
+            float dx = u.x - pos.x, dz = u.y - pos.z, min = u.z + 1.6f;
+            if (dx * dx + dz * dz < min * min) return;
+        }
+
+        string key = EdgeKeys[rng.Next(EdgeKeys.Length)];
+        var go = ModelLibrary.Spawn(key, roofRoot, pos, yaw, fitFootprint: 2.6f, addCollider: true, keepAnimations: false);
+        if (go == null) return;
+        go.name = "EdgeCover_" + key;
+        used.Add(new Vector3(pos.x, pos.z, 1.4f));
     }
 
     bool TryPlace(Transform t, float r, System.Random rng, float w, float d, List<Vector3> used, float margin)

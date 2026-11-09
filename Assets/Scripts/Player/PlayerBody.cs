@@ -4,8 +4,9 @@ using UnityEngine.Rendering;
 /// <summary>
 /// The player's character body. Spawns the model chosen for the character, plays its animations from movement
 /// (idle, walk, run, jump, strafe, turn), and handles the first/third-person view (ToggleView key).
-/// First person: the body casts a shadow but is not drawn, and the first-person arms show.
-/// Third person: the whole body is drawn and the camera pulls back behind it; the arms are hidden.
+/// First person: the camera sits at eye height, the head bone is shrunk to nothing so the head blocks no view,
+/// and the rest of the body (shoulders, arms, chest, legs) stays drawn so its movement is visible.
+/// Third person: the head is restored and the camera pulls back behind the player.
 /// </summary>
 public class PlayerBody : MonoBehaviour
 {
@@ -24,7 +25,7 @@ public class PlayerBody : MonoBehaviour
     GameObject model;
     Animation anim;
     Renderer[] renderers;
-    Transform armRight, armLeft;
+    Transform headBone;
     bool thirdPerson;
     string current = "";
     float turnUntil;
@@ -40,11 +41,7 @@ public class PlayerBody : MonoBehaviour
         }
         anim = model.GetComponentInChildren<Animation>(true);
         renderers = model.GetComponentsInChildren<Renderer>(true);
-        if (cam != null)
-        {
-            armRight = cam.Find("ArmRight");
-            armLeft = cam.Find("ArmLeft");
-        }
+        headBone = FindHeadBone(model.transform);
         ApplyView();
     }
 
@@ -66,16 +63,21 @@ public class PlayerBody : MonoBehaviour
         if (renderers != null)
         {
             foreach (var r in renderers)
-                if (r != null) r.shadowCastingMode = thirdPerson ? ShadowCastingMode.On : ShadowCastingMode.ShadowsOnly;
+                if (r != null) r.shadowCastingMode = ShadowCastingMode.On;
         }
-        // FirstPersonArms builds its arms in its own Start, so look them up here rather than only once.
-        if (cam != null)
+        // The head is hidden in first person (its bone shrinks to nothing and the skin follows it).
+        if (headBone != null) headBone.localScale = thirdPerson ? Vector3.one : Vector3.zero;
+    }
+
+    /// <summary>The head bone of a rig. Mixamo names it "mixamorig:Head", the UE-style rig "girl02:head".</summary>
+    static Transform FindHeadBone(Transform root)
+    {
+        foreach (var t in root.GetComponentsInChildren<Transform>(true))
         {
-            if (armRight == null) armRight = cam.Find("ArmRight");
-            if (armLeft == null) armLeft = cam.Find("ArmLeft");
+            string n = t.name.ToLowerInvariant();
+            if (n.EndsWith("head") && !n.Contains("top") && !n.Contains("eye")) return t;
         }
-        if (armRight != null) armRight.gameObject.SetActive(!thirdPerson);
-        if (armLeft != null) armLeft.gameObject.SetActive(!thirdPerson);
+        return null;
     }
 
     void Animate()

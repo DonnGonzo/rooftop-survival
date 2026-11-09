@@ -96,7 +96,6 @@ public static class SceneBootstrap
         cam.farClipPlane = 1200f;   // the sun, moon and clouds sit about 650 m out
         camGo.AddComponent<AudioListener>();
         camGo.AddComponent<CameraFeel>();
-        camGo.AddComponent<FirstPersonArms>();
 
         var pc = p.AddComponent<PlayerController>();
         pc.cam = camGo.transform;
