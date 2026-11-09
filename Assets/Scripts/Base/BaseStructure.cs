@@ -2,37 +2,52 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Anything the player builds that counts toward base defense: traps, walls, spikes, nets.
-/// Add this to each buildable prefab and set its defense value.
+/// Anything the player has built on the roof: planters, snares, spike traps, barricades.
+/// Its Health component is its durability (the bar above it); when that reaches 0 it breaks.
+/// defense counts toward the base's defense while the structure stands, scaled by its condition.
+/// Every structure is saved with the run and rebuilt on load.
 /// </summary>
 public class BaseStructure : MonoBehaviour
 {
     public static readonly List<BaseStructure> All = new List<BaseStructure>();
 
     public string id = "trap";
-    public float defense = 10f;
-    public float maxHealth = 100f;
-    public float health = 100f;
+    public float defense;
+    public Health hp;
 
     void OnEnable() { All.Add(this); }
     void OnDisable() { All.Remove(this); }
 
-    /// <summary>Total defense, scaled by each structure's remaining health.</summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() { All.Clear(); }
+
+    public float Condition => hp != null && hp.max > 0f ? Mathf.Clamp01(hp.current / hp.max) : 1f;
+
+    /// <summary>Total defense of everything standing, scaled by each structure's condition.</summary>
     public static float TotalDefense()
     {
         float total = 0f;
-        foreach (var s in All) total += s.defense * Mathf.Clamp01(s.health / s.maxHealth);
+        foreach (var s in All) if (s != null) total += s.defense * s.Condition;
         return total;
     }
 
-    public static void DamageAll(float amount)
+    public void Damage(float amount, string source = "raid")
     {
-        foreach (var s in new List<BaseStructure>(All)) s.Damage(amount);
+        if (hp != null) hp.TakeDamage(amount, source);
     }
 
-    public void Damage(float amount)
+    /// <summary>The nearest standing structure to a point, or null.</summary>
+    public static BaseStructure Nearest(Vector3 from, float maxDist, string onlyId = null)
     {
-        health -= amount;
-        if (health <= 0f) Destroy(gameObject);
+        BaseStructure best = null;
+        float bestD = maxDist;
+        foreach (var s in All)
+        {
+            if (s == null || (s.hp != null && s.hp.Dead)) continue;
+            if (onlyId != null && s.id != onlyId) continue;
+            float d = Vector3.Distance(from, s.transform.position);
+            if (d < bestD) { best = s; bestD = d; }
+        }
+        return best;
     }
 }

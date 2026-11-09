@@ -11,6 +11,8 @@ public class PlacedStructure
     public Vector3 pos;
     public float yRot;
     public float health;
+    public int stage = -1;    // planters: crop stage (-1 = empty)
+    public bool watered;      // planters: watered today
 }
 
 [Serializable]
@@ -21,6 +23,10 @@ public class RunData
     public float hour = 7f;
     public int food, water, wood, scrap;
     public float roofQuality;               // 0 (terrible) .. 1 (great)
+    public string equipped = "";            // weapon in hand ("" = fists)
+    public int waterDay;                    // last day the water tower was emptied
+    public bool hungry;                     // missed food or water at the last dawn
+    public List<int> looted = new List<int>();   // roof supply caches already taken
     public List<ItemStack> items = new List<ItemStack>();   // crafted and found items (not food/water/wood/scrap)
     public List<PlacedStructure> structures = new List<PlacedStructure>();
 }
@@ -53,6 +59,8 @@ public class RunManager : MonoBehaviour
             catch (Exception e) { Debug.LogWarning("Save unreadable, starting fresh: " + e.Message); }
         }
         if (Current == null) StartNewRun();
+        if (Current.equipped == null) Current.equipped = "";
+        if (Current.looted == null) Current.looted = new List<int>();
     }
 
     public void StartNewRun()
@@ -70,18 +78,27 @@ public class RunManager : MonoBehaviour
             Current.day = GameClock.Instance.Day;
             Current.hour = GameClock.Instance.Hour;
         }
-        Current.structures.Clear();
-        foreach (var s in BaseStructure.All)
+        // Structures exist only once the roof has been built; before that, keep what the file had.
+        if (RoofGenerator.Built)
         {
-            Current.structures.Add(new PlacedStructure
+            Current.structures.Clear();
+            foreach (var s in BaseStructure.All)
             {
-                id = s.id,
-                pos = s.transform.position,
-                yRot = s.transform.eulerAngles.y,
-                health = s.health
-            });
+                if (s == null || (s.hp != null && s.hp.Dead)) continue;
+                var plot = s.GetComponent<FarmPlot>();
+                Current.structures.Add(new PlacedStructure
+                {
+                    id = s.id,
+                    pos = s.transform.position,
+                    yRot = s.transform.eulerAngles.y,
+                    health = s.hp != null ? s.hp.current : 0f,
+                    stage = plot != null ? plot.Stage : -1,
+                    watered = plot != null && plot.Watered
+                });
+            }
         }
-        File.WriteAllText(SavePath, JsonUtility.ToJson(Current));
+        try { File.WriteAllText(SavePath, JsonUtility.ToJson(Current)); }
+        catch (Exception e) { Debug.LogWarning("Could not save the run: " + e.Message); }
     }
 
     /// <summary>Base overrun: wipe everything, roll a new random roof, reload.</summary>
@@ -94,6 +111,7 @@ public class RunManager : MonoBehaviour
         if (File.Exists(SavePath)) File.Delete(SavePath);
         Current = null;
         StartNewRun();
+        GameState.AutoStart = true;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 

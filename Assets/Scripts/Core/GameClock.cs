@@ -26,6 +26,18 @@ public class GameClock : MonoBehaviour
     public Gradient sunColor;
     public float maxSunIntensity = 1.2f;
 
+    /// <summary>True while the player sleeps on the cot: time runs fast until dawn.</summary>
+    public static bool Sleeping { get; private set; }
+
+    public static void Sleep() { Sleeping = true; }
+    public static void WakeUp() { Sleeping = false; }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() { Sleeping = false; OnDawn = null; OnDuskWarning = null; OnNightFall = null; }
+
+    /// <summary>0 at night, 1 in full daylight. Used by the sky and the lighting.</summary>
+    public float Daylight => Mathf.Clamp01(Mathf.Sin((Hour - 6f) / 24f * Mathf.PI * 2f) * 3f + 0.15f);
+
     public int Day { get; private set; } = 1;
     public float Hour { get; private set; } = 7f;
     public bool IsNight => Hour >= nightHour || Hour < dawnHour;
@@ -51,6 +63,7 @@ public class GameClock : MonoBehaviour
         if (Crossed(prev, Hour, dawnHour))
         {
             Day++;
+            Sleeping = false;
             OnDawn?.Invoke(Day);
             RunManager.Instance?.Save();
         }
@@ -68,12 +81,12 @@ public class GameClock : MonoBehaviour
     void ApplyLighting()
     {
         if (sun == null) return;
-        // 6h = sunrise (0 deg), 12h = overhead (90 deg), 18h = sunset (180 deg)
+        // 6h = sunrise, 12h = overhead, 18h = sunset. The sun also swings a little south so shadows have length at noon.
         float angle = Hour / 24f * 360f - 90f;
-        sun.transform.rotation = Quaternion.Euler(angle, 170f, 0f);
+        sun.transform.rotation = Quaternion.Euler(angle, 160f, 0f) * Quaternion.Euler(0f, 0f, 22f);
         float s = Mathf.Sin((Hour - 6f) / 24f * Mathf.PI * 2f);
-        sun.intensity = Mathf.Clamp01(s * 2f) * maxSunIntensity;
+        sun.intensity = Mathf.Clamp01(s * 3f) * maxSunIntensity;
         if (sunColor != null) sun.color = sunColor.Evaluate(Mathf.Clamp01(s));
-        RenderSettings.ambientIntensity = Mathf.Lerp(0.15f, 1f, Mathf.Clamp01(s * 2f));
+        sun.shadows = s > 0.02f ? LightShadows.Soft : LightShadows.None;
     }
 }

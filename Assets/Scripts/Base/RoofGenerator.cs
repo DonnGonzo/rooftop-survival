@@ -1,50 +1,45 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 /// <summary>
-/// Builds a random rooftop from the run seed (same seed = same roof). Roof quality (0..1)
-/// drives size, planter count, clutter and starting supplies, so each new run can be
-/// easier or harder than the last. Uses the Polyfork models when they are imported,
-/// otherwise falls back to simple placeholder shapes.
+/// Builds the player's rooftop from the run seed (same seed = same roof). Roof quality (0..1) drives its
+/// size, how much the water tower gives and the starting supplies, so each new run is easier or harder.
+///
+/// The roof starts nearly empty: a campfire, a cot, a workbench, the water tower, the stair hut, the rope
+/// anchor and a few supply caches. Everything else (planters, traps, barricades) the player crafts and places.
 /// </summary>
 public class RoofGenerator : MonoBehaviour
 {
     public static Vector2 Size { get; private set; }
+    /// <summary>True once the roof exists and saved structures have been rebuilt.</summary>
+    public static bool Built { get; private set; }
+    /// <summary>Where the rappel rope is fixed on the roof, and where it touches the street.</summary>
+    public static Vector3 AnchorPos { get; private set; }
+    public static Vector3 RopeFoot { get; private set; }
 
     [Header("Scene refs")]
     public Transform roofRoot;
-    public Transform playerSpawn;
     [Tooltip("Optional trigger box; resized to fit the generated roof.")]
     public BoxCollider zoneCollider;
 
     [Header("Size range (metres)")]
-    public Vector2 widthRange = new Vector2(12f, 26f);
-    public Vector2 depthRange = new Vector2(12f, 26f);
+    public Vector2 widthRange = new Vector2(15f, 27f);
+    public Vector2 depthRange = new Vector2(15f, 27f);
 
-    static readonly string[] ClutterKeys =
+    static readonly string[] JunkKeys = { "roof-solar-array", "scaffold-material-stack", "structural-column-casing", "fuel-jerrycan" };
+
+    struct Cache { public string model, item; public int min, max; public Cache(string m, string i, int a, int b) { model = m; item = i; min = a; max = b; } }
+    static readonly Cache[] Caches =
     {
-        "roof-solar-array", "ammo-crate", "loot-crate", "loot-sack", "tool-case", "fuel-jerrycan",
-        "scaffold-material-stack", "hollow-log", "boombox", "fire-hydrant", "structural-column-casing",
-        "camouflage-net-canopy", "treasure-chest",
-        // Polyfork roof base modules (CC BY 4.0, see CREDITS.md)
-        "survival-roof-assembly-module-20c655", "hide-rain-catchment-funnel-e41d94", "water-tower-on-a-dbc730",
-        "portable-device-charging-dock-b175a5", "layered-leaf-sleeping-cot-7ddad4", "gravity-water-filter-stack-4a54f5"
+        new Cache("loot-crate", "wood", 2, 4), new Cache("tool-case", "scrap", 2, 3),
+        new Cache("loot-sack", "cloth", 2, 3), new Cache("ammo-crate", "scrap", 1, 3),
+        new Cache("loot-sack", "food", 1, 3), new Cache("bottle", "water", 1, 2),
     };
 
-    // Barriers that stand along the parapet as cover (Polyfork, CC BY 4.0, see CREDITS.md)
-    static readonly string[] EdgeKeys =
-    {
-        "sandbag-wall-section-7075ee", "palisade-wall-621e29", "czech-hedgehog-d77ae5",
-        "barbed-wire-fence-section-a01906", "skated-jersey-barrier-7f0a04"
-    };
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() { Built = false; Size = Vector2.zero; }
 
-    // Loot containers scattered on the roof. Everything else is for the player to craft and place.
-    static readonly string[] LootKeys =
-    {
-        "loot-crate", "ammo-crate", "loot-sack", "tool-case", "treasure-chest"
-    };
+    void OnDestroy() { Built = false; }
 
     void Start()
     {
@@ -62,11 +57,14 @@ public class RoofGenerator : MonoBehaviour
     {
         float q = RollQuality(run.seed);
         run.roofQuality = q;
-        run.food = Mathf.RoundToInt(Mathf.Lerp(2f, 14f, q));
-        run.water = Mathf.RoundToInt(Mathf.Lerp(3f, 16f, q));
-        run.wood = Mathf.RoundToInt(Mathf.Lerp(0f, 12f, q));
-        run.scrap = Mathf.RoundToInt(Mathf.Lerp(0f, 8f, q));
+        run.food = Mathf.RoundToInt(Mathf.Lerp(3f, 8f, q));
+        run.water = Mathf.RoundToInt(Mathf.Lerp(3f, 8f, q));
+        run.wood = Mathf.RoundToInt(Mathf.Lerp(3f, 8f, q));
+        run.scrap = Mathf.RoundToInt(Mathf.Lerp(1f, 5f, q));
+        run.items.Add(new ItemStack { id = "planter_kit", count = 1 });   // one planter to get the farm started
     }
+
+    public static int WaterPerDay(RunData run) { return 2 + Mathf.RoundToInt(run.roofQuality * 3f); }
 
     public void Generate(RunData run)
     {
@@ -77,19 +75,24 @@ public class RoofGenerator : MonoBehaviour
         float d = Mathf.Lerp(depthRange.x, depthRange.y, Mathf.Clamp01(q + ((float)rng.NextDouble() - 0.5f) * 0.5f));
         Size = new Vector2(w, d);
 
-        // Floor, the building body down to the street, and a parapet with one gap (the grapple point).
-        Cube("RoofFloor", new Vector3(0f, -0.5f, 0f), new Vector3(w, 1f, d), new Color(0.33f, 0.33f, 0.35f));
-        float bodyH = -StreetBuilder.StreetY;
-        Cube("BuildingBody", new Vector3(0f, -1f - bodyH / 2f, 0f), new Vector3(w, bodyH, d), new Color(0.36f, 0.4f, 0.34f));
+        var roofMat = Look.Mat("roofing", new Color(0.5f, 0.5f, 0.53f), 5f);
+        var wallMat = Look.Mat("concrete", new Color(0.6f, 0.58f, 0.55f), 3f);
+        var capMat = Look.Mat("concrete", new Color(0.72f, 0.7f, 0.66f), 2f);
+        Color brick = Color.Lerp(new Color(0.62f, 0.4f, 0.32f), new Color(0.55f, 0.55f, 0.5f), (float)rng.NextDouble());
+        var bodyMat = Look.Mat("windows", brick, 7f);
 
-        const float ph = 1.0f, pt = 0.35f, gap = 3f;
-        var wall = new Color(0.45f, 0.45f, 0.47f);
-        float seg = (w - gap) / 2f;
-        Cube("ParapetS", new Vector3(0f, ph / 2f, -d / 2f + pt / 2f), new Vector3(w, ph, pt), wall);
-        Cube("ParapetW", new Vector3(-w / 2f + pt / 2f, ph / 2f, 0f), new Vector3(pt, ph, d), wall);
-        Cube("ParapetE", new Vector3(w / 2f - pt / 2f, ph / 2f, 0f), new Vector3(pt, ph, d), wall);
-        Cube("ParapetN1", new Vector3(-(gap / 2f + seg / 2f), ph / 2f, d / 2f - pt / 2f), new Vector3(seg, ph, pt), wall);
-        Cube("ParapetN2", new Vector3((gap / 2f + seg / 2f), ph / 2f, d / 2f - pt / 2f), new Vector3(seg, ph, pt), wall);
+        // Floor slab, then the building below it down to the street.
+        Look.Box("RoofFloor", roofRoot, new Vector3(0f, -0.5f, 0f), new Vector3(w, 1f, d), roofMat);
+        float bodyH = -StreetBuilder.StreetY - 1f;
+        Look.Box("BuildingBody", roofRoot, new Vector3(0f, -1f - bodyH / 2f, 0f), new Vector3(w - 0.4f, bodyH, d - 0.4f), bodyMat);
+        Look.Box("Cornice", roofRoot, new Vector3(0f, -1.25f, 0f), new Vector3(w + 0.5f, 0.5f, d + 0.5f), capMat, false);
+
+        // Parapet with a coping stone on top, all four sides.
+        const float ph = 1.05f, pt = 0.35f;
+        Wall("ParapetN", new Vector3(0f, ph / 2f, d / 2f - pt / 2f), new Vector3(w, ph, pt), wallMat, capMat);
+        Wall("ParapetS", new Vector3(0f, ph / 2f, -d / 2f + pt / 2f), new Vector3(w, ph, pt), wallMat, capMat);
+        Wall("ParapetE", new Vector3(w / 2f - pt / 2f, ph / 2f, 0f), new Vector3(pt, ph, d - pt * 2f), wallMat, capMat);
+        Wall("ParapetW", new Vector3(-w / 2f + pt / 2f, ph / 2f, 0f), new Vector3(pt, ph, d - pt * 2f), wallMat, capMat);
 
         if (zoneCollider != null)
         {
@@ -97,40 +100,174 @@ public class RoofGenerator : MonoBehaviour
             zoneCollider.size = new Vector3(w + 1f, 14f, d + 1f);
             zoneCollider.center = new Vector3(0f, 6f, 0f);
         }
-        if (playerSpawn != null) playerSpawn.localPosition = new Vector3(0f, 0.2f, 0f);
 
         // Each entry: x, z, radius. Keeps things from overlapping.
-        var used = new List<Vector3>();
-        used.Add(new Vector3(0f, 0f, 2.2f));            // spawn point
-        used.Add(new Vector3(0f, d / 2f - 1.5f, 2f));   // keep the grapple gap clear
+        var used = new List<Vector3> { new Vector3(0f, 0f, 2.2f) };   // the player's spawn point
 
-        // Grapple anchor at the gap, campfire as the base hub.
-        var anchor = ModelLibrary.Spawn("tendon-harness", roofRoot, new Vector3(0f, 0f, d / 2f - 1.2f), 180f, fitHeight: 1.1f);
-        if (anchor != null) anchor.name = "GrappleAnchor";
+        BuildRopeAnchor(w, d, used);
+        BuildCamp(run, w, d, used);
+        BuildWaterTower(run, w, d, used);
+        BuildStairHut(w, d, used);
 
-        float fx = -w / 2f + 3f, fz = -d / 2f + 3f;
-        var fire = ModelLibrary.Spawn("open-campfire", roofRoot, new Vector3(fx, 0f, fz));
+        // A few supply caches. Each can be taken once per run.
+        int caches = 3 + Mathf.RoundToInt(q * 2f);
+        for (int i = 0; i < caches; i++)
+        {
+            var c = Caches[rng.Next(Caches.Length)];
+            int n = rng.Next(c.min, c.max + 1);
+            Vector3 at;
+            if (!FindSpot(0.7f, rng, w, d, used, 1.6f, out at)) continue;
+            if (run.looted.Contains(i)) continue;
+            var pk = Pickup.Create(c.model, c.item, n, roofRoot, at, 0.8f);
+            int index = i;
+            pk.onTaken = () => { run.looted.Add(index); };
+        }
+
+        // Rooftop junk along the edges: scenery only.
+        int junk = 1 + rng.Next(3);
+        for (int i = 0; i < junk; i++)
+        {
+            string key = JunkKeys[rng.Next(JunkKeys.Length)];
+            var go = ModelLibrary.Spawn(key, roofRoot, Vector3.zero, rng.Next(4) * 90f, fitFootprint: key == "fuel-jerrycan" ? 0.5f : 2.2f,
+                                        addCollider: true, keepAnimations: false);
+            if (go == null) continue;
+            Vector3 at;
+            if (FindSpot(1.4f, rng, w, d, used, 1.2f, out at)) go.transform.localPosition = at;
+            else Destroy(go);
+        }
+
+        // Vents and a duct, built from boxes.
+        var metal = Look.Mat("concrete", new Color(0.5f, 0.53f, 0.55f), 1.5f, 0.35f);
+        for (int i = 0; i < 2; i++)
+        {
+            Vector3 at;
+            if (!FindSpot(0.8f, rng, w, d, used, 1.4f, out at)) continue;
+            Look.Box("Vent", roofRoot, at + new Vector3(0f, 0.35f, 0f), new Vector3(0.9f, 0.7f, 0.9f), metal);
+            Look.Box("VentCap", roofRoot, at + new Vector3(0f, 0.76f, 0f), new Vector3(1.1f, 0.08f, 1.1f), metal, false);
+        }
+
+        Buildables.Restore(run);
+        Built = true;
+    }
+
+    void Wall(string n, Vector3 pos, Vector3 size, Material wall, Material cap)
+    {
+        Look.Box(n, roofRoot, pos, size, wall);
+        bool alongX = size.x > size.z;
+        Vector3 capSize = alongX ? new Vector3(size.x + 0.1f, 0.12f, size.z + 0.16f) : new Vector3(size.x + 0.16f, 0.12f, size.z + 0.1f);
+        Look.Box(n + "Cap", roofRoot, pos + new Vector3(0f, size.y / 2f + 0.06f, 0f), capSize, cap, false);
+    }
+
+    /// <summary>The yellow davit on the north wall, with a rope hanging all the way to the street.</summary>
+    void BuildRopeAnchor(float w, float d, List<Vector3> used)
+    {
+        Vector3 pos = new Vector3(0f, 0f, d / 2f - 1.0f);
+        var go = ModelLibrary.Spawn("rs-rope-anchor", roofRoot, pos, 180f, fitHeight: 1.5f, addCollider: false, keepAnimations: false);
+        if (go != null) go.name = "RopeAnchor";
+        used.Add(new Vector3(pos.x, pos.z, 1.6f));
+
+        AnchorPos = roofRoot.TransformPoint(pos);
+        RopeFoot = new Vector3(AnchorPos.x, StreetBuilder.StreetY, roofRoot.position.z + d / 2f + 0.9f);
+
+        float len = -StreetBuilder.StreetY + 1.2f;
+        var rope = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        rope.name = "Rope";
+        Destroy(rope.GetComponent<Collider>());
+        rope.transform.SetParent(roofRoot, false);
+        rope.transform.position = new Vector3(RopeFoot.x, 1.2f - len / 2f, RopeFoot.z - 0.3f);
+        rope.transform.localScale = new Vector3(0.07f, len / 2f, 0.07f);
+        Look.Paint(rope, "plain", new Color(0.72f, 0.6f, 0.38f));
+    }
+
+    /// <summary>Campfire, cot and workbench in the south-west corner.</summary>
+    void BuildCamp(RunData run, float w, float d, List<Vector3> used)
+    {
+        float fx = -w / 2f + 3.4f, fz = -d / 2f + 3.4f;
+        var fire = ModelLibrary.Spawn("open-campfire", roofRoot, new Vector3(fx, 0f, fz), 0f, fitFootprint: 1.3f);
         if (fire != null)
         {
             ModelLibrary.PlayClip(fire, "tick");
             fire.AddComponent<FireFlicker>();
         }
-        used.Add(new Vector3(fx, fz, 1.4f));
+        used.Add(new Vector3(fx, fz, 1.5f));
 
-        // Sparse roof: the landmark, a few loot containers and a little junk. Planters, cover and traps are crafted.
-        SpawnLandmark(rng, w, d, used);
+        // Cot: sleep through the night.
+        Vector3 cotPos = new Vector3(fx + 2.6f, 0f, fz - 1.2f);
+        var cot = ModelLibrary.Spawn("layered-leaf-sleeping-cot", roofRoot, cotPos, 90f, fitFootprint: 2.1f, addCollider: false, keepAnimations: false);
+        if (cot == null)
+        {
+            cot = Look.Box("Cot", roofRoot, cotPos + new Vector3(0f, 0.2f, 0f), new Vector3(2f, 0.4f, 0.9f), Look.Mat("planks", new Color(0.5f, 0.4f, 0.3f), 1f), false);
+        }
+        cot.name = "Cot";
+        ActionSpot.Add(cot, 2.6f, () =>
+        {
+            var c = GameClock.Instance;
+            if (c == null || GameClock.Sleeping) return "";
+            return (c.Hour >= 18f || c.Hour < 5f) ? "Sleep until dawn" : "";
+        }, () =>
+        {
+            if (NightDirector.RaidActive) { Hud.Toast("Not with those things on the roof."); return; }
+            GameClock.Sleep();
+            Tutorial.Notify("sleep");
+        });
+        used.Add(new Vector3(cotPos.x, cotPos.z, 1.4f));
 
-        int loot = Mathf.RoundToInt(Mathf.Lerp(2f, 4f, q));
-        for (int i = 0; i < loot; i++) SpawnClutter(LootKeys, rng, w, d, used);
-
-        int junk = Mathf.RoundToInt(Mathf.Lerp(2f, 0f, q));   // worse roof = a bit more junk
-        for (int i = 0; i < junk; i++) SpawnClutter(ClutterKeys, rng, w, d, used);
+        // Workbench against the west parapet.
+        Vector3 benchPos = new Vector3(-w / 2f + 1.3f, 0f, fz + 3.2f);
+        var bench = ModelLibrary.Spawn("upgradeable-assembly-workbench", roofRoot, benchPos, 90f, fitFootprint: 2.2f, addCollider: true, keepAnimations: false);
+        if (bench == null)
+            bench = Look.Box("Workbench", roofRoot, benchPos + new Vector3(0f, 0.45f, 0f), new Vector3(0.9f, 0.9f, 2f), Look.Mat("planks", new Color(0.55f, 0.42f, 0.28f), 1f));
+        bench.name = "Workbench";
+        Workbench.Spot = bench.transform;
+        ActionSpot.Add(bench, 3f, () => "Use workbench (crafting)", () => { GameState.UiOpen = true; });
+        used.Add(new Vector3(benchPos.x, benchPos.z, 1.6f));
     }
 
-    /// <summary>A crafted planter placed at a spot on the roof. Parented to the roof root when one exists.</summary>
+    /// <summary>Water tower in the south-east corner. It refills once a day.</summary>
+    void BuildWaterTower(RunData run, float w, float d, List<Vector3> used)
+    {
+        Vector3 pos = new Vector3(w / 2f - 3.0f, 0f, -d / 2f + 3.0f);
+        var go = ModelLibrary.Spawn("water-tower-on-a-dbc730", roofRoot, pos, 0f, fitHeight: 6.5f, addCollider: false, keepAnimations: false);
+        if (go == null) return;
+        go.name = "WaterTower";
+        var lb = ModelLibrary.LocalBounds(go.transform);
+        float r = Mathf.Max(lb.size.x, lb.size.z) * 0.5f * go.transform.localScale.x;
+        // Only the legs block you: a slim collider at the centre, so you can walk under the tank.
+        var col = go.AddComponent<CapsuleCollider>();
+        col.radius = 0.5f / go.transform.localScale.x;
+        col.height = lb.size.y;
+        col.center = new Vector3(0f, lb.size.y / 2f, 0f);
+        used.Add(new Vector3(pos.x, pos.z, r + 0.3f));
+
+        ActionSpot.Add(go, r + 2.2f, () =>
+        {
+            var c = GameClock.Instance;
+            if (c == null) return "";
+            return run.waterDay == c.Day ? "Water tower: empty until tomorrow" : "Collect water (+" + WaterPerDay(run) + ")";
+        }, () =>
+        {
+            var c = GameClock.Instance;
+            if (c == null || run.waterDay == c.Day) { Hud.Toast("The tank refills overnight."); return; }
+            run.waterDay = c.Day;
+            Items.Add("water", WaterPerDay(run));
+            Hud.Toast("+" + WaterPerDay(run) + " Water");
+        });
+    }
+
+    /// <summary>The roof-access hut in the north-east corner. Scenery, and a windbreak.</summary>
+    void BuildStairHut(float w, float d, List<Vector3> used)
+    {
+        Vector3 pos = new Vector3(w / 2f - 2.6f, 0f, d / 2f - 2.9f);
+        var go = ModelLibrary.Spawn("rs-stair-hut", roofRoot, pos, 90f, fitHeight: 3.7f, addCollider: true, keepAnimations: false);
+        if (go == null) return;
+        go.name = "StairHut";
+        used.Add(new Vector3(pos.x, pos.z, 3.0f));
+    }
+
+    /// <summary>A crafted planter placed at a spot on the roof.</summary>
     public static GameObject SpawnPlanterAt(Vector3 pos, float yaw)
     {
-        GameObject go = ModelLibrary.Spawn("modular-planter-trough", null, pos, yaw, addCollider: true, keepAnimations: true);
+        GameObject go = ModelLibrary.Spawn("modular-planter-trough", null, pos, yaw, fitFootprint: 2.4f, addCollider: true, keepAnimations: true);
         if (go != null)
         {
             ModelLibrary.PlayClip(go, "tick");   // the plants sway in the wind
@@ -143,128 +280,29 @@ public class RoofGenerator : MonoBehaviour
             go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.transform.position = pos + Vector3.up * 0.3f;
             go.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
-            go.transform.localScale = new Vector3(2.5f, 0.6f, 1f);
-            Tint(go, new Color(0.4f, 0.26f, 0.15f));
+            go.transform.localScale = new Vector3(2.4f, 0.6f, 1f);
+            Look.Paint(go, "planks", new Color(0.5f, 0.36f, 0.22f), 1f);
             var plot = go.AddComponent<FarmPlot>();
             var crop = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             Destroy(crop.GetComponent<Collider>());
             crop.transform.SetParent(go.transform, false);
             crop.transform.localPosition = new Vector3(0f, 1.2f, 0f);
             crop.transform.localScale = Vector3.one * 0.5f;
-            Tint(crop, new Color(0.25f, 0.65f, 0.2f));
+            Look.Paint(crop, "grass", new Color(0.3f, 0.6f, 0.25f), 0.5f);
             plot.SetCropVisual(crop.transform);
         }
         go.name = "Planter";
         return go;
     }
 
-    void SpawnPlanter(System.Random rng, float w, float d, List<Vector3> used)
+    /// <summary>Finds a free spot on the roof for something of radius r. Local coordinates.</summary>
+    bool FindSpot(float r, System.Random rng, float w, float d, List<Vector3> used, float margin, out Vector3 at)
     {
-        float yaw = rng.Next(2) * 90f;
-        GameObject go = ModelLibrary.Spawn("modular-planter-trough", roofRoot, Vector3.zero, yaw,
-                                           addCollider: true, keepAnimations: true);
-        float r = 2.2f;
-        FarmPlot plot;
-        if (go != null)
-        {
-            ModelLibrary.PlayClip(go, "tick");   // the plants on the planter sway in the wind
-            plot = go.AddComponent<FarmPlot>();
-            var crop = FindDeep(go.transform, "planting");
-            if (crop != null) plot.SetCropVisual(crop);
-        }
-        else
-        {
-            go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.transform.SetParent(roofRoot, false);
-            go.transform.localScale = new Vector3(2.5f, 0.6f, 1f);
-            go.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
-            Tint(go, new Color(0.4f, 0.26f, 0.15f));
-            plot = go.AddComponent<FarmPlot>();
-            var crop = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            Destroy(crop.GetComponent<Collider>());
-            crop.transform.SetParent(go.transform, false);
-            crop.transform.localPosition = new Vector3(0f, 1.2f, 0f);
-            crop.transform.localScale = Vector3.one * 0.5f;
-            Tint(crop, new Color(0.25f, 0.65f, 0.2f));
-            plot.SetCropVisual(crop.transform);
-            r = 1.6f;
-        }
-        go.name = "Planter";
-        if (!TryPlace(go.transform, r, rng, w, d, used, 2f)) Destroy(go);
-    }
-
-    void SpawnClutter(string[] keys, System.Random rng, float w, float d, List<Vector3> used)
-    {
-        string key = keys[rng.Next(keys.Length)];
-        float yaw = (float)rng.NextDouble() * 360f;
-        GameObject go = ModelLibrary.Spawn(key, roofRoot, Vector3.zero, yaw, addCollider: true, keepAnimations: false);
-        float r;
-        if (go != null)
-        {
-            var lb = ModelLibrary.LocalBounds(go.transform);
-            r = Mathf.Max(lb.size.x, lb.size.z) * 0.5f * go.transform.localScale.x;
-        }
-        else
-        {
-            go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.transform.SetParent(roofRoot, false);
-            go.transform.localScale = new Vector3(1.2f, 0.4f + (float)rng.NextDouble() * 1.2f, 0.9f);
-            Tint(go, new Color(0.3f, 0.3f, 0.28f));
-            r = 0.8f;
-        }
-        go.name = "Clutter_" + key;
-        if (!TryPlace(go.transform, r, rng, w, d, used, 1.2f)) Destroy(go);
-    }
-
-    /// <summary>A water tower on the corner away from the campfire, so the roof has a landmark to find your way by.</summary>
-    void SpawnLandmark(System.Random rng, float w, float d, List<Vector3> used)
-    {
-        var pos = new Vector3(w / 2f - 3.2f, 0f, -d / 2f + 3.2f);
-        var go = ModelLibrary.Spawn("water-tower-on-a-dbc730", roofRoot, pos, (float)rng.NextDouble() * 360f,
-                                    addCollider: true, keepAnimations: false);
-        if (go == null) return;
-        go.name = "Landmark_WaterTower";
-        var lb = ModelLibrary.LocalBounds(go.transform);
-        float r = Mathf.Max(lb.size.x, lb.size.z) * 0.5f * go.transform.localScale.x;
-        used.Add(new Vector3(pos.x, pos.z, r));
-    }
-
-    /// <summary>One barrier against the parapet, turned to face into the roof. Keeps the grapple gap clear.</summary>
-    void SpawnEdgeCover(System.Random rng, float w, float d, List<Vector3> used)
-    {
-        const float inset = 1.8f;
-        int side = rng.Next(4);   // 0 north, 1 south, 2 east, 3 west
-        float t = (float)(rng.NextDouble() * 2.0 - 1.0);
-        Vector3 pos;
-        float yaw;
-        switch (side)
-        {
-            case 0: pos = new Vector3(t * (w / 2f - 2f), 0f, d / 2f - inset); yaw = 180f; break;
-            case 1: pos = new Vector3(t * (w / 2f - 2f), 0f, -d / 2f + inset); yaw = 0f; break;
-            case 2: pos = new Vector3(w / 2f - inset, 0f, t * (d / 2f - 2f)); yaw = 270f; break;
-            default: pos = new Vector3(-w / 2f + inset, 0f, t * (d / 2f - 2f)); yaw = 90f; break;
-        }
-        if (side == 0 && Mathf.Abs(pos.x) < 3.5f) return;   // the grapple gap in the north wall
-
-        foreach (var u in used)
-        {
-            float dx = u.x - pos.x, dz = u.y - pos.z, min = u.z + 1.6f;
-            if (dx * dx + dz * dz < min * min) return;
-        }
-
-        string key = EdgeKeys[rng.Next(EdgeKeys.Length)];
-        var go = ModelLibrary.Spawn(key, roofRoot, pos, yaw, fitFootprint: 2.6f, addCollider: true, keepAnimations: false);
-        if (go == null) return;
-        go.name = "EdgeCover_" + key;
-        used.Add(new Vector3(pos.x, pos.z, 1.4f));
-    }
-
-    bool TryPlace(Transform t, float r, System.Random rng, float w, float d, List<Vector3> used, float margin)
-    {
+        at = Vector3.zero;
         float xr = w / 2f - margin - r, zr = d / 2f - margin - r;
         if (xr < 0f || zr < 0f) return false;
 
-        for (int attempt = 0; attempt < 30; attempt++)
+        for (int attempt = 0; attempt < 40; attempt++)
         {
             float x = Mathf.Lerp(-xr, xr, (float)rng.NextDouble());
             float z = Mathf.Lerp(-zr, zr, (float)rng.NextDouble());
@@ -276,21 +314,10 @@ public class RoofGenerator : MonoBehaviour
             }
             if (!clear) continue;
             used.Add(new Vector3(x, z, r));
-            t.localPosition = new Vector3(x, 0f, z);
+            at = new Vector3(x, 0f, z);
             return true;
         }
         return false;
-    }
-
-    GameObject Cube(string n, Vector3 pos, Vector3 scale, Color c)
-    {
-        var g = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        g.name = n;
-        g.transform.SetParent(roofRoot, false);
-        g.transform.localPosition = pos;
-        g.transform.localScale = scale;
-        Tint(g, c);
-        return g;
     }
 
     static Transform FindDeep(Transform root, string name)
@@ -304,94 +331,6 @@ public class RoofGenerator : MonoBehaviour
         return null;
     }
 
-    static Shader litShader;
-
-    /// <summary>Finds a shader that works in the current render pipeline (URP, HDRP or built-in).</summary>
-    static Shader GetLitShader()
-    {
-        if (litShader != null) return litShader;
-        var rp = GraphicsSettings.currentRenderPipeline;
-        if (rp != null && rp.defaultShader != null) litShader = rp.defaultShader;
-        if (litShader == null) litShader = Shader.Find("Universal Render Pipeline/Lit");
-        if (litShader == null) litShader = Shader.Find("HDRP/Lit");
-        if (litShader == null) litShader = Shader.Find("Standard");
-        return litShader;
-    }
-
-    static Material templateMat;
-    static Material plainMat;
-
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetShader() { litShader = null; templateMat = null; plainMat = null; }
-
-    /// <summary>
-    /// A material known to render correctly in this project: the one a Polyfork model already uses
-    /// (glTFast's own shader). Falls back to the pipeline default shader if the models are missing.
-    /// </summary>
-    static Material GetTemplate()
-    {
-        if (templateMat != null) return templateMat;
-        var prefab = ModelLibrary.Load("ammo-crate");
-        if (prefab != null)
-        {
-            var r = prefab.GetComponentInChildren<Renderer>(true);
-            if (r != null && r.sharedMaterial != null) templateMat = r.sharedMaterial;
-        }
-        return templateMat;
-    }
-
-    /// <summary>True when a shader is missing or Unity has replaced it with its magenta error shader.</summary>
-    static bool IsBroken(Shader s)
-    {
-        return s == null || !s.isSupported || s.name.IndexOf("InternalError", StringComparison.OrdinalIgnoreCase) >= 0
-            || s.name.IndexOf("Error", StringComparison.OrdinalIgnoreCase) >= 0;
-    }
-
-    /// <summary>
-    /// Makes a fresh material from the first candidate whose shader actually works in this build.
-    /// Order: a Polyfork glTF material (proven to render here), the Resources Plain asset, then the pipeline default.
-    /// A broken candidate is skipped instead of producing magenta surfaces.
-    /// </summary>
-    static Material NewWorkingMaterial()
-    {
-        var t = GetTemplate();
-        if (t != null && !IsBroken(t.shader)) return new Material(t);
-
-        if (plainMat == null) plainMat = Resources.Load<Material>("Materials/Plain");
-        if (plainMat != null && !IsBroken(plainMat.shader)) return new Material(plainMat);
-
-        var lit = GetLitShader();
-        if (!IsBroken(lit)) return new Material(lit);
-
-        return null;
-    }
-
-    static bool warnedNoMaterial;
-
-    public static void Tint(GameObject go, Color c)
-    {
-        var r = go.GetComponent<Renderer>();
-        if (r == null) return;
-
-        Material m = NewWorkingMaterial();
-        if (m == null)
-        {
-            if (!warnedNoMaterial)
-            {
-                warnedNoMaterial = true;
-                Debug.LogWarning("[RoofGenerator] No working shader found. Check Graphics settings and that URP is the active pipeline.");
-            }
-            return;
-        }
-
-        string prop = m.HasProperty("_BaseColor") ? "_BaseColor"
-                    : m.HasProperty("baseColorFactor") ? "baseColorFactor"
-                    : m.HasProperty("_Color") ? "_Color" : null;
-        if (prop != null) m.SetColor(prop, c);
-
-        if (m.HasProperty("baseColorTexture")) m.SetTexture("baseColorTexture", Texture2D.whiteTexture);
-        if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", Texture2D.whiteTexture);
-
-        r.sharedMaterial = m;
-    }
+    /// <summary>Flat colour on a primitive. Kept for older call sites; new code uses Look.</summary>
+    public static void Tint(GameObject go, Color c) { Look.Paint(go, c); }
 }

@@ -2,10 +2,8 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// First-person controller and roof actions.
-/// WASD move, mouse look, Shift sprint, Space jump, E = pick up / plant / water / harvest,
-/// T = place a spike trap (needs a trap kit), G = rappel down or climb up, Q = use a bandage or food.
-/// Melee is in MeleeCombat (left click, right click).
+/// The player: movement, looking, health, and the roof actions (interact, place a kit, rope up and down).
+/// Melee is in MeleeCombat and the visible body in PlayerBody. Every key comes from Keybinds.
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
@@ -14,25 +12,35 @@ public class PlayerController : MonoBehaviour
 
     public Transform cam;
     public float walkSpeed = 4.5f, sprintSpeed = 7f, jumpSpeed = 5f, gravity = -18f;
-    public float reach = 3.5f;
     public float maxHealth = 100f;
     public float health = 100f;
-    public float roofRegenPerSecond = 3f;
+    public float roofRegenPerSecond = 2f;
     [Range(0f, 1f)] public float deathSupplyLoss = 0.25f;
 
     public bool OnStreet => transform.position.y < StreetBand;
 
-    // Read by CameraFeel for head bob, landing and sprint effects.
+    // Read by CameraFeel, PlayerBody and the HUD.
     public float Pitch => pitch;
     public float VerticalSpeed => velY;
     public bool Grounded => cc != null && cc.isGrounded;
     public float HorizontalSpeed { get; private set; }
     public bool Sprinting { get; private set; }
+    public bool Climbing => busy;
+    /// <summary>What the Interact key would do right now ("" if nothing).</summary>
+    public string Prompt { get; private set; } = "";
+    /// <summary>Hint for the rope key, shown when the player is at either end of the rope.</summary>
+    public string RopePrompt { get; private set; } = "";
+
     static float StreetBand => StreetBuilder.StreetY + 8f;
+    const float RopeRange = 4.5f;
 
     CharacterController cc;
     float pitch, velY;
-    bool busy;   // rappelling
+    bool busy;   // on the rope
+    Interactable focus;
+
+    /// <summary>Test hook: point the view up or down.</summary>
+    public void SetPitch(float p) { pitch = Mathf.Clamp(p, -85f, 85f); }
 
     void Awake()
     {
@@ -47,7 +55,7 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
-        if (GameState.Frozen || busy) return;
+        if (GameState.Frozen || busy) { Prompt = ""; RopePrompt = ""; return; }
 
         var look = Inp.Look() * GameSettings.Sensitivity;
         transform.Rotate(0f, look.x, 0f);
@@ -58,26 +66,40 @@ public class PlayerController : MonoBehaviour
         var m = Inp.Move();
         if (m.magnitude > 0.5f) Tutorial.Notify("move");
         Vector3 dir = transform.right * m.x + transform.forward * m.y;
-        float speed = Inp.Sprint() ? sprintSpeed : walkSpeed;
+        bool sprint = Inp.Sprint() && m.y > 0.1f;
+        float speed = sprint ? sprintSpeed : walkSpeed;
+        if (m.y < -0.1f) speed *= 0.7f;   // backing up is slower
 
         if (cc.isGrounded && velY < 0f) velY = -2f;
         if (cc.isGrounded && Inp.Jump()) velY = jumpSpeed;
         velY += gravity * Time.deltaTime;
         cc.Move((dir * speed + Vector3.up * velY) * Time.deltaTime);
         HorizontalSpeed = new Vector2(cc.velocity.x, cc.velocity.z).magnitude;
-        Sprinting = m.magnitude > 0.5f && Inp.Sprint();
+        Sprinting = sprint && m.magnitude > 0.5f;
 
         float y = transform.position.y;
-        if (y < -12f && y > StreetBand) Die("You fell off the roof!");
+        if (y < -12f && y > StreetBand) Die("You fell from the roof.");
         else if (y < StreetBuilder.StreetY - 10f) Die("You fell out of the world.");
 
-        if (RoofZone.PlayerOnRoof && health < maxHealth)
+        var run = RunManager.Instance != null ? RunManager.Instance.Current : null;
+        bool fed = run == null || !run.hungry;
+        if (RoofZone.PlayerOnRoof && fed && health < maxHealth && !NightDirector.RaidActive)
             health = Mathf.Min(maxHealth, health + roofRegenPerSecond * Time.deltaTime);
 
-        if (Inp.Interact()) Interact();
+        // What is in reach?
+        focus = Interactable.Best(transform.position + Vector3.up * 0.9f, transform.forward);
+        Prompt = focus != null ? focus.Prompt : "";
+        RopePrompt = AtRopeTop() ? "Rappel down to the street" : AtRopeFoot() ? "Climb the rope to your roof" : "";
+
+        if (Inp.Interact())
+        {
+            if (focus != null) focus.Use();
+            else Hud.Toast("Nothing to use here.");
+        }
         if (Inp.Build()) PlaceBuild();
         if (Inp.CycleBuild()) Items.CycleBuild();
-        if (Inp.Grapple()) Grapple();
+        if (Inp.SwapWeapon()) Items.CycleWeapon();
+        if (Inp.Grapple()) UseRope();
         if (Inp.Use()) Hud.Toast(Items.UseBest());
     }
 
@@ -87,11 +109,12 @@ public class PlayerController : MonoBehaviour
 
     public void TakeDamage(float amount, string source)
     {
-        if (GameState.Frozen || health <= 0f) return;
+        if (GameState.Frozen || health <= 0f || busy) return;
         health -= amount;
         CameraFeel.Shake(Mathf.Clamp01(amount / 25f));
-        Hud.Toast("Hit by " + source.Replace("(Clone)", "") + " (-" + amount.ToString("F0") + ")");
-        if (health <= 0f) Die("You were mauled on the street.");
+        Hud.Hurt();
+        if (GameClock.Sleeping) GameClock.WakeUp();
+        if (health <= 0f) Die("You were brought down by " + source + ".");
     }
 
     void Die(string why)
@@ -99,6 +122,9 @@ public class PlayerController : MonoBehaviour
         StopAllCoroutines();
         busy = false;
         health = maxHealth;
+
+        // Going down while raiders hold the roof loses the whole run.
+        if (NightDirector.PlayerFell()) return;
 
         var run = RunManager.Instance != null ? RunManager.Instance.Current : null;
         if (run != null && deathSupplyLoss > 0f)
@@ -109,59 +135,59 @@ public class PlayerController : MonoBehaviour
             run.scrap = Mathf.FloorToInt(run.scrap * (1f - deathSupplyLoss));
         }
 
+        Teleport(new Vector3(0f, 0.3f, 0f));
+        health = maxHealth * 0.5f;
+        Hud.Banner(why + " You come to on your roof, a quarter of your supplies gone.", 6f);
+    }
+
+    public void Teleport(Vector3 pos)
+    {
         cc.enabled = false;
-        transform.position = new Vector3(0f, 0.3f, 0f);
+        transform.position = pos;
         cc.enabled = true;
         velY = 0f;
-        Hud.Toast(why + " You wake on the roof and lost some supplies.");
     }
 
-    // ---------------------------------------------------------------- rappel
+    // ---------------------------------------------------------------- the rope
 
-    void Grapple()
+    bool AtRopeTop()
     {
-        Vector2 size = RoofGenerator.Size;
-        if (size == Vector2.zero) return;
-        Vector3 p = transform.position;
-        float hx = size.x / 2f, hz = size.y / 2f;
-
-        if (!OnStreet)
-        {
-            if (!RoofZone.PlayerOnRoof) return;
-            float dx = hx - Mathf.Abs(p.x), dz = hz - Mathf.Abs(p.z);
-            if (Mathf.Min(dx, dz) > 3.5f) { Hud.Toast("Walk to the roof edge to rappel down."); return; }
-
-            bool sideX = dx < dz;
-            Vector3 outward = sideX ? new Vector3(Mathf.Sign(p.x), 0f, 0f) : new Vector3(0f, 0f, Mathf.Sign(p.z));
-            Vector3 hook = sideX
-                ? new Vector3(Mathf.Sign(p.x) * (hx + 1.2f), 0.3f, p.z)
-                : new Vector3(p.x, 0.3f, Mathf.Sign(p.z) * (hz + 1.2f));
-            Vector3 ground = new Vector3(hook.x, StreetBuilder.StreetY + 0.3f, hook.z) + outward * 3f;
-
-            Tutorial.Notify("rappel");
-            StartCoroutine(Travel(
-                new[] { hook, new Vector3(hook.x, StreetBuilder.StreetY + 0.3f, hook.z), ground },
-                new[] { 0.6f, 4f, 0.6f }, "Rappelling down. Be back before dark!"));
-        }
-        else
-        {
-            Vector2 flat = new Vector2(p.x, p.z);
-            Vector2 wall = new Vector2(Mathf.Clamp(flat.x, -hx, hx), Mathf.Clamp(flat.y, -hz, hz));
-            if ((flat - wall).magnitude > 8f) { Hud.Toast("Get to the base of your building to climb up."); return; }
-
-            Vector2 n = flat - wall;
-            n = n.sqrMagnitude < 0.0001f ? Vector2.up : n.normalized;
-            Vector2 baseP = wall + n * 1.2f, inward = wall - n * 2.5f;
-            StartCoroutine(Travel(new[]
-            {
-                new Vector3(baseP.x, StreetBuilder.StreetY + 0.3f, baseP.y),
-                new Vector3(baseP.x, 0.3f, baseP.y),
-                new Vector3(inward.x, 0.3f, inward.y)
-            }, new[] { 0.6f, 5f, 0.6f }, "Climbing back up..."));
-        }
+        if (OnStreet || !RoofZone.PlayerOnRoof) return false;
+        Vector3 a = RoofGenerator.AnchorPos;
+        return Vector2.Distance(new Vector2(transform.position.x, transform.position.z), new Vector2(a.x, a.z)) < RopeRange;
     }
 
-    IEnumerator Travel(Vector3[] points, float[] durations, string message)
+    bool AtRopeFoot()
+    {
+        if (!OnStreet) return false;
+        Vector3 f = RoofGenerator.RopeFoot;
+        return Vector2.Distance(new Vector2(transform.position.x, transform.position.z), new Vector2(f.x, f.z)) < RopeRange + 1.5f;
+    }
+
+    void UseRope()
+    {
+        if (RoofGenerator.Size == Vector2.zero) return;
+        Vector3 foot = RoofGenerator.RopeFoot;
+        Vector3 top = new Vector3(foot.x, 0.4f, foot.z);
+
+        if (AtRopeTop())
+        {
+            Tutorial.Notify("rappel");
+            Vector3 land = foot + new Vector3(0f, 0.3f, 2.5f);
+            StartCoroutine(Travel(new[] { top + Vector3.up * 1.2f, top, foot + Vector3.up * 0.4f, land },
+                                  new[] { 0.5f, 0.4f, 4.5f, 0.5f }, "Rappelling down. Be back before dark."));
+        }
+        else if (AtRopeFoot())
+        {
+            Vector3 inside = RoofGenerator.AnchorPos + new Vector3(0f, 0.3f, -2.2f);
+            StartCoroutine(Travel(new[] { foot + Vector3.up * 0.4f, top, top + Vector3.up * 1.2f, inside },
+                                  new[] { 0.5f, 6f, 0.4f, 0.5f }, "Climbing...", () => Tutorial.Notify("roof")));
+        }
+        else if (OnStreet) Hud.Toast("The rope hangs on the north face of your building.");
+        else Hud.Toast("Go to the yellow rope anchor on the north wall.");
+    }
+
+    IEnumerator Travel(Vector3[] points, float[] durations, string message, System.Action done = null)
     {
         busy = true;
         cc.enabled = false;
@@ -172,7 +198,7 @@ public class PlayerController : MonoBehaviour
             float t = 0f;
             while (t < 1f)
             {
-                t += Time.deltaTime / durations[i];
+                if (!GameState.Frozen) t += Time.deltaTime / durations[i];
                 transform.position = Vector3.Lerp(a, b, Mathf.SmoothStep(0f, 1f, Mathf.Min(t, 1f)));
                 yield return null;
             }
@@ -180,63 +206,33 @@ public class PlayerController : MonoBehaviour
         cc.enabled = true;
         velY = 0f;
         busy = false;
+        done?.Invoke();
     }
 
-    // ---------------------------------------------------------------- roof and street actions
+    // ---------------------------------------------------------------- building
 
-    void Interact()
-    {
-        var pk = Pickup.Nearest(transform.position, 2.6f);
-        if (pk != null)
-        {
-            pk.Take();
-            return;
-        }
-
-        FarmPlot best = null;
-        float bestDist = reach + 1.5f;   // planters are long, so measure from their middle
-        foreach (var p in FindObjectsByType<FarmPlot>())
-        {
-            float d = Vector3.Distance(transform.position, p.transform.position);
-            if (d < bestDist) { best = p; bestDist = d; }
-        }
-        if (best == null) { Hud.Toast("Nothing to interact with."); return; }
-
-        if (best.Stage == -1)
-        {
-            best.Plant();
-            Hud.Toast("Planted.");
-            Tutorial.Notify("plant");
-        }
-        else if (best.Ready)
-        {
-            int bonus = Characters.Current.planterBonus;
-            int got = best.Harvest() + bonus;   // Harvest() already adds the crop yield
-            if (bonus > 0) Items.Add("food", bonus);
-            Hud.Toast("Harvested +" + got + " food.");
-        }
-        else if (best.Watered) Hud.Toast("Already watered today.");
-        else if (best.Water())
-        {
-            Hud.Toast("Watered (-1 water).");
-            Tutorial.Notify("water");
-        }
-        else Hud.Toast("No water left.");
-    }
-
-    /// <summary>T: place the selected crafted kit (trap, snare, barricade or planter) in front of the player.</summary>
+    /// <summary>Build key: place the selected crafted kit in front of the player, on the roof.</summary>
     void PlaceBuild()
     {
-        if (!RoofZone.PlayerOnRoof) { Hud.Toast("Place buildings on the roof."); return; }
+        if (!RoofZone.PlayerOnRoof || OnStreet) { Hud.Toast("Kits can only be placed on your roof."); return; }
         string kit = Items.SelectedKit;
         if (Items.Count(kit) <= 0)
         {
-            Hud.Toast(Items.Def(kit).name + " needed. Craft one with Tab, or press R to pick another kit.");
-            return;
+            // Nothing of the selected kind: fall through to any kit the player does carry.
+            foreach (var k in Items.BuildKits)
+                if (Items.Count(k) > 0) { kit = k; Items.SelectedIndex = System.Array.IndexOf(Items.BuildKits, k); break; }
+            if (Items.Count(kit) <= 0)
+            {
+                Hud.Toast("No kits. Craft one with " + Keybinds.Describe(GameAction.Inventory) + ".");
+                return;
+            }
         }
 
         Vector3 pos = transform.position + transform.forward * 2.2f;
-        if (Physics.Raycast(pos + Vector3.up * 2f, Vector3.down, out var hit, 6f)) pos = hit.point;
+        Vector2 half = RoofGenerator.Size / 2f - Vector2.one * 1.2f;
+        pos.x = Mathf.Clamp(pos.x, -half.x, half.x);
+        pos.z = Mathf.Clamp(pos.z, -half.y, half.y);
+        pos.y = 0f;
 
         if (Buildables.Place(kit, pos, transform.eulerAngles.y)) Items.Remove(kit, 1);
     }

@@ -10,7 +10,7 @@ using UnityEngine.InputSystem.Controls;
 public enum GameAction
 {
     Forward, Back, Left, Right, Jump, Sprint, Interact, Build, Grapple, Use,
-    Inventory, Pause, FastForward, Attack, Heavy, ToggleView, CycleBuild
+    Inventory, Pause, FastForward, Attack, Heavy, ToggleView, CycleBuild, SwapWeapon
 }
 
 /// <summary>
@@ -23,9 +23,9 @@ public static class Keybinds
     public static readonly string[] Labels =
     {
         "Move forward", "Move back", "Move left", "Move right", "Jump", "Sprint",
-        "Interact / plant / harvest", "Place selected roof kit", "Rappel / climb", "Use item",
+        "Interact", "Place selected kit", "Use the rope", "Use bandage / eat",
         "Inventory and crafting", "Pause menu", "Fast forward time", "Attack (combo)",
-        "Heavy swing", "Toggle third-person view", "Cycle roof kit"
+        "Heavy strike", "Toggle third-person view", "Next kit", "Switch weapon"
     };
 
     static readonly KeyCode[] Defaults =
@@ -33,7 +33,7 @@ public static class Keybinds
         KeyCode.W, KeyCode.S, KeyCode.A, KeyCode.D, KeyCode.Space, KeyCode.LeftShift,
         KeyCode.E, KeyCode.T, KeyCode.G, KeyCode.Q,
         KeyCode.Tab, KeyCode.Escape, KeyCode.N, KeyCode.Mouse0,
-        KeyCode.Mouse1, KeyCode.V, KeyCode.R
+        KeyCode.Mouse1, KeyCode.V, KeyCode.R, KeyCode.F
     };
 
     static readonly KeyCode[] binds = new KeyCode[Defaults.Length];

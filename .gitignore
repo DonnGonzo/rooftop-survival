@@ -26,3 +26,4 @@ crashlytics-build.properties
 /[Bb]uildNrun/
 *.exe
 *.dll.meta.bak
+/DevBridge/

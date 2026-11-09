@@ -92,7 +92,7 @@ public static class SceneBootstrap
         camGo.transform.SetParent(p.transform, false);
         camGo.transform.localPosition = new Vector3(0f, 1.65f, 0f);
         var cam = camGo.AddComponent<Camera>();
-        cam.nearClipPlane = 0.1f;
+        cam.nearClipPlane = 0.05f;
         cam.farClipPlane = 1200f;   // the sun, moon and clouds sit about 650 m out
         camGo.AddComponent<AudioListener>();
         camGo.AddComponent<CameraFeel>();

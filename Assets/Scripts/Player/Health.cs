@@ -17,6 +17,13 @@ public class Health : MonoBehaviour
     public float barAfterHit = 5f;
     [Tooltip("Traps: on reaching 0 the object is removed instead of dropping loot and falling over.")]
     public bool breakOnDeath;
+    [Tooltip("Shown when a structure breaks.")]
+    public string breakMessage = "";
+    [Tooltip("Structures: hide the bar until it has taken damage.")]
+    public bool barOnlyWhenHurt;
+
+    /// <summary>Raised when this dies or breaks.</summary>
+    public event System.Action OnDeath;
 
     public float current;
     public bool Dead => current <= 0f;
@@ -37,7 +44,7 @@ public class Health : MonoBehaviour
     {
         if (Dead) return;
         var cam = Camera.main;
-        if (cam == null || !BarVisible()) return;
+        if (cam == null || GameState.MenuOpen || !BarVisible()) return;
 
         // Top of the creature's renderers, so the bar sits above it whatever the model height.
         var rs = GetComponentsInChildren<Renderer>();
@@ -63,15 +70,17 @@ public class Health : MonoBehaviour
     bool BarVisible()
     {
         if (Time.time - lastHitTime < barAfterHit) return true;
+        if (barOnlyWhenHurt && current >= max) return false;
         var p = PlayerController.Instance;
         return p != null && Vector3.Distance(p.transform.position, transform.position) < barRange;
     }
 
     void Die()
     {
+        OnDeath?.Invoke();
         if (breakOnDeath)
         {
-            Hud.Toast("A trap broke.");
+            if (!string.IsNullOrEmpty(breakMessage)) Hud.Toast(breakMessage);
             Destroy(gameObject);
             return;
         }

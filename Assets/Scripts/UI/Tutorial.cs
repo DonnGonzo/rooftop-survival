@@ -3,22 +3,34 @@ using UnityEngine;
 /// <summary>First-run tutorial. Each step advances when the player does the thing. Progress is saved.</summary>
 public static class Tutorial
 {
-    static readonly string[] Ids = { "move", "plant", "water", "rappel", "pickup", "craft", "trap", "attack", "roof" };
-    static readonly string[] Texts =
-    {
-        "Walk with WASD. Hold Shift to sprint, Space to jump.",
-        "Stand next to a planter and press E to plant a seed.",
-        "Press E again to water it. Crops grow one stage each dawn if watered.",
-        "Stand at the roof edge and press G to rappel down to the street.",
-        "Find a supply crate on the street and press E to take what's inside.",
-        "Press Tab to craft. Make a club (3 wood + 1 scrap) or a trap kit (2 scrap + 1 wood).",
-        "On the roof, press T to place a spike trap using a trap kit.",
-        "Left click to attack. Click again quickly to chain a combo. Right click for a heavy swing.",
-        "Get back on the roof before dusk. Night 11 is when the attacks start.",
-    };
+    static readonly string[] Ids = { "move", "pickup", "planter", "plant", "water", "craft", "attack", "rappel", "loot", "roof", "sleep" };
 
-    const string SaveKey = "tut_step";
+    static string K(GameAction a) => Keybinds.Describe(a);
+
+    static string Text(int i)
+    {
+        switch (Ids[i])
+        {
+            case "move": return "Look around with the mouse and walk with " + K(GameAction.Forward) + K(GameAction.Left) + K(GameAction.Back) + K(GameAction.Right) + ". Hold " + K(GameAction.Sprint) + " to run.";
+            case "pickup": return "There are supply caches on your roof. Walk up to one and press " + K(GameAction.Interact) + ".";
+            case "planter": return "You carry a planter kit. Face a clear spot and press " + K(GameAction.Build) + " to place it.";
+            case "plant": return "Stand at the planter and press " + K(GameAction.Interact) + " to plant seeds.";
+            case "water": return "Press " + K(GameAction.Interact) + " again to water it. A watered crop grows one stage each dawn.";
+            case "craft": return "Press " + K(GameAction.Inventory) + " and craft a nail club (3 Wood + 1 Scrap).";
+            case "attack": return K(GameAction.Attack) + " attacks; three in a row is a combo. " + K(GameAction.Heavy) + " is a heavy strike. Try a swing.";
+            case "rappel": return "Go to the yellow rope anchor on the north wall and press " + K(GameAction.Grapple) + " to rappel to the street.";
+            case "loot": return "Search the street. Doorways lead into buildings; crates, sacks and cases hold supplies.";
+            case "roof": return "Return to the rope and press " + K(GameAction.Grapple) + " to climb home. Be up before night.";
+            case "sleep": return "After dark, sleep on the cot (" + K(GameAction.Interact) + "). You eat 1 Food and drink 1 Water each dawn.";
+        }
+        return "";
+    }
+
+    const string SaveKey = "tut_step_v2";
     static int index = -1;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() { index = -1; }
 
     static void Load()
     {
@@ -31,11 +43,12 @@ public static class Tutorial
         get
         {
             Load();
-            return index < Ids.Length;
+            return GameSettings.ShowTutorial && index < Ids.Length;
         }
     }
 
-    public static string Current => Active ? Texts[index] : "";
+    public static string Current => Active ? Text(index) : "";
+    public static string Progress { get { Load(); return (Mathf.Min(index, Ids.Length - 1) + 1) + " of " + Ids.Length; } }
 
     public static void Notify(string id)
     {
@@ -44,7 +57,8 @@ public static class Tutorial
 
         index++;
         PlayerPrefs.SetInt(SaveKey, index);
-        Hud.Toast(index < Ids.Length ? "Tutorial step done!" : "Tutorial complete. You're on your own now.");
+        if (index >= Ids.Length)
+            Hud.Banner("You know the basics. Nights 1-10 are safe: build traps and barricades before night 11.", 8f);
     }
 
     public static void Reset()

@@ -10,44 +10,35 @@ using UnityEngine;
 /// </summary>
 public static class ModelLibrary
 {
-    // Every non-kit model in the project folder (file name without .glb).
-    static readonly string[] Stems =
-    {
-        "alien-hive-bug-base","alpine-ibex-base","ammo-crate-ee3ec0","apron-tile-8670c1","arcade-console-ec27c2",
-        "arched-black-cat-407cf6","art-deco-setback-tower-b3a788","axe-b545d6","baccarat-table-8b4183","banana-09c206",
-        "beelzebufo-base","bellhop-053c4d","black-bear-adbdc7","blackjack-table-6794fe","boombox-d0048f","bottle-ca0f79",
-        "bread-loaf-0e0ab5","brick-tenement-7d2014","camouflage-net-canopy-ce6249","campus-shuttle-bus-27dcaa",
-        "capsule-residential-tower-80300b","cat-base","cattle-grid-fff844","cherry-pair-71cfe9","chicken-base",
-        "cobblestone-street-tile-c1dca2","compact-hatchback-386417","corn-cob-769fd8","corn-maze-wall-run-22b0da",
-        "corner-shop-5aec8c","croissant-758d69","crow-base","cruiser-and-longboard-b3d081","cycle-shelter-714b16",
-        "department-store-ffbd58","dirt-road-tile-52acff","farm-dog-723730","fire-door-set-5a3cca","fire-engine-7d476b",
-        "fire-hydrant-b68b17","firefighter-b13b36","fried-egg-bdcd3f","fuel-jerrycan-6f1d85","goat-base","gold-coin-29afc1",
-        "hamburger-060fd6","hammer-fa3e51","highway-tile-3a705e","hollow-log-329fd7","knife-3d7947","lair-stone-stair-4e09d5",
-        "lakeside-swing-tree-02c084","lemon-1c574f","lobby-tiered-fountain-354424","loot-crate-23dd3b","loot-sack-4762f5",
-        "lounge-drum-table-13d029","meadow-grass-plant-7085e0","meadow-tile-d0d82a","mesh-site-fence-run-a798a0",
-        "mine-spoil-gravel-tile-40ae10","modular-planter-trough-f7905e","mountain-hare-base","open-campfire-5b463f",
-        "orange-ea3791","ornamental-grass-tuft-e4156b","pistol-42de05","pizza-slice-ddfb9d","plain-wall-segment-143b6d",
-        "postwar-apartment-slab-cee5f9","prewar-apartment-house-1081a6","promenade-paving-tile-5656ce",
-        "railway-telegraph-pole-run-bb9354","rat-base","rayuela-box-4587d4","red-fox-5c3bc0","roof-solar-array-c4b996",
-        "rooftop-helipad-deck-24e53c","roulette-table-75c9b1","roulette-wheel-f92631","scaffold-material-stack-836dd2",
-        "schoolkid-da94c1","seedling-tray-116925","shell-scatter-6d36b7","shovel-997c4d","showgirl-5bfa7a",
-        "slab-apartment-block-1b02a2","stadium-terrain-a09f73","station-bench-5f56b4","steampunk-farm-terrain-98cb8a",
-        "strawberry-57b7d5","structural-column-casing-bc5956","sword-11907e","tank-track-rut-decal-8c32a2",
-        "taxi-rank-sign-f5f39d","teardrop-trailer-580e25","tendon-harness-6ef893","tool-case-d92909",
-        "touring-motorcycle-3b1ad3","tower-crane-mast-1784a3","trailhead-sign-aa29e1","treasure-chest-58da92",
-        "velvet-rope-stanchion-0b761a","village-child-bef09e","vintage-hearse-3b2ec1","warp-gate-b507bf","wolf-base",
-        "xoloitzcuintli-1cd7c8"
-    };
-
     static Dictionary<string, string> index;
     static readonly Dictionary<string, GameObject> cache = new Dictionary<string, GameObject>();
     static bool warned;
 
+    /// <summary>
+    /// Reads Resources/model-index.txt (written by the Editor whenever a model is added). Each model can be
+    /// asked for by its full file name or by the name without the 6-character hash at the end.
+    /// </summary>
     static void BuildIndex()
     {
         index = new Dictionary<string, string>();
+        var list = Resources.Load<TextAsset>("model-index");
+        if (list == null) return;
         var hash = new Regex("-[0-9a-f]{6}$");
-        foreach (var s in Stems) index[hash.Replace(s, "")] = s;
+        foreach (string line in list.text.Split('\n'))
+        {
+            string stem = line.Trim();
+            if (stem.Length == 0) continue;
+            index[stem] = stem;
+            string shortKey = hash.Replace(stem, "");
+            if (!index.ContainsKey(shortKey)) index[shortKey] = stem;
+        }
+    }
+
+    /// <summary>True when a model with this name is in the project.</summary>
+    public static bool Has(string key)
+    {
+        if (index == null) BuildIndex();
+        return index.ContainsKey(key);
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -64,8 +55,7 @@ public static class ModelLibrary
         if (go == null && !warned)
         {
             warned = true;
-            Debug.LogWarning("[ModelLibrary] Could not load 'Resources/Models/" + stem + "'. " +
-                             "Move the .glb files into Assets/Resources/Models (see README). Using placeholders.");
+            Debug.LogWarning("[ModelLibrary] Could not load 'Resources/Models/" + stem + "'. Using a placeholder.");
         }
         cache[key] = go;
         return go;

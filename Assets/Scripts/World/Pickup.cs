@@ -1,20 +1,33 @@
 using UnityEngine;
 
-/// <summary>An item on the street or roof. Stand close and press E to take it.</summary>
-public class Pickup : MonoBehaviour
+/// <summary>A supply container on the street, in a room or on the roof. Stand close and press Interact to empty it.</summary>
+public class Pickup : Interactable
 {
     public string itemId;
     public int count;
+    /// <summary>Called once when the player takes it.</summary>
+    public System.Action onTaken;
+    float baseY, phase;
 
-    public static Pickup Create(string modelKey, string itemId, int count, Transform parent, Vector3 worldPos)
+    public override string Prompt
     {
-        var go = ModelLibrary.Spawn(modelKey, parent, Vector3.zero, Random.Range(0f, 360f), fitFootprint: 1f, keepAnimations: false);
+        get
+        {
+            var def = Items.Def(itemId);
+            return "Take " + count + " " + (def != null ? def.name : itemId);
+        }
+    }
+
+    public static Pickup Create(string modelKey, string itemId, int count, Transform parent, Vector3 worldPos, float size = 0.9f)
+    {
+        var go = ModelLibrary.Spawn(modelKey, parent, Vector3.zero, Random.Range(0f, 360f), fitFootprint: size, keepAnimations: false);
         if (go == null)
         {
             go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.transform.SetParent(parent, false);
             go.transform.localScale = Vector3.one * 0.5f;
-            RoofGenerator.Tint(go, new Color(0.9f, 0.8f, 0.2f));
+            Destroy(go.GetComponent<Collider>());
+            Look.Paint(go, "planks", new Color(0.7f, 0.55f, 0.3f), 1f);
         }
         go.transform.position = worldPos;
         go.name = "Pickup_" + itemId;
@@ -22,32 +35,33 @@ public class Pickup : MonoBehaviour
         var p = go.AddComponent<Pickup>();
         p.itemId = itemId;
         p.count = count;
+        p.range = 2.6f;
         return p;
+    }
+
+    void Start()
+    {
+        baseY = transform.position.y;
+        phase = Random.Range(0f, 6f);
     }
 
     void Update()
     {
-        transform.Rotate(0f, 45f * Time.deltaTime, 0f);
+        // A slow bob so supplies catch the eye without spinning like arcade coins.
+        var p = transform.position;
+        p.y = baseY + 0.04f + Mathf.Sin(Time.time * 2f + phase) * 0.04f;
+        transform.position = p;
     }
 
-    public static Pickup Nearest(Vector3 from, float range)
-    {
-        Pickup best = null;
-        float bestD = range;
-        foreach (var pk in FindObjectsByType<Pickup>())
-        {
-            float d = Vector3.Distance(from, pk.transform.position);
-            if (d < bestD) { best = pk; bestD = d; }
-        }
-        return best;
-    }
-
-    public void Take()
+    public override void Use()
     {
         Items.Add(itemId, count);
         var def = Items.Def(itemId);
-        Hud.Toast("Picked up " + count + " " + (def != null ? def.name : itemId) + ".");
+        Hud.Toast("+" + count + " " + (def != null ? def.name : itemId));
         Tutorial.Notify("pickup");
+        var pc = PlayerController.Instance;
+        if (pc != null && pc.OnStreet) Tutorial.Notify("loot");
+        onTaken?.Invoke();
         Destroy(gameObject);
     }
 }
