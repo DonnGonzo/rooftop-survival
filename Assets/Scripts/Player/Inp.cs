@@ -27,6 +27,7 @@ public static class Inp
 
     public static bool Interact() => Keybinds.Pressed(GameAction.Interact);
     public static bool Build() => Keybinds.Pressed(GameAction.Build);
+    public static bool CycleBuild() => Keybinds.Pressed(GameAction.CycleBuild);
     public static bool Grapple() => Keybinds.Pressed(GameAction.Grapple);
     public static bool Jump() => Keybinds.Pressed(GameAction.Jump);
     public static bool Sprint() => Keybinds.Held(GameAction.Sprint);

@@ -10,7 +10,7 @@ using UnityEngine.InputSystem.Controls;
 public enum GameAction
 {
     Forward, Back, Left, Right, Jump, Sprint, Interact, Build, Grapple, Use,
-    Inventory, Pause, FastForward, Attack, Heavy, ToggleView
+    Inventory, Pause, FastForward, Attack, Heavy, ToggleView, CycleBuild
 }
 
 /// <summary>
@@ -23,9 +23,9 @@ public static class Keybinds
     public static readonly string[] Labels =
     {
         "Move forward", "Move back", "Move left", "Move right", "Jump", "Sprint",
-        "Interact / plant / harvest", "Place spike trap", "Rappel / climb", "Use item",
+        "Interact / plant / harvest", "Place selected roof kit", "Rappel / climb", "Use item",
         "Inventory and crafting", "Pause menu", "Fast forward time", "Attack (combo)",
-        "Heavy swing", "Toggle third-person view"
+        "Heavy swing", "Toggle third-person view", "Cycle roof kit"
     };
 
     static readonly KeyCode[] Defaults =
@@ -33,10 +33,10 @@ public static class Keybinds
         KeyCode.W, KeyCode.S, KeyCode.A, KeyCode.D, KeyCode.Space, KeyCode.LeftShift,
         KeyCode.E, KeyCode.T, KeyCode.G, KeyCode.Q,
         KeyCode.Tab, KeyCode.Escape, KeyCode.N, KeyCode.Mouse0,
-        KeyCode.Mouse1, KeyCode.V
+        KeyCode.Mouse1, KeyCode.V, KeyCode.R
     };
 
-    static readonly KeyCode[] binds = new KeyCode[16];
+    static readonly KeyCode[] binds = new KeyCode[Defaults.Length];
     static bool loaded;
     static readonly Dictionary<KeyCode, string> keyNameCache = new Dictionary<KeyCode, string>();
 

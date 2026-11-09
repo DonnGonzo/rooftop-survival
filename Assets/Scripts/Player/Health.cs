@@ -15,6 +15,8 @@ public class Health : MonoBehaviour
     public float barRange = 22f;
     [Tooltip("Seconds the bar stays up after a hit.")]
     public float barAfterHit = 5f;
+    [Tooltip("Traps: on reaching 0 the object is removed instead of dropping loot and falling over.")]
+    public bool breakOnDeath;
 
     public float current;
     public bool Dead => current <= 0f;
@@ -67,6 +69,12 @@ public class Health : MonoBehaviour
 
     void Die()
     {
+        if (breakOnDeath)
+        {
+            Hud.Toast("A trap broke.");
+            Destroy(gameObject);
+            return;
+        }
         if (dropCount > 0 && !string.IsNullOrEmpty(dropItem))
             Pickup.Create("loot-sack", dropItem, dropCount, null, transform.position + Vector3.up * 0.2f);
         StartCoroutine(FallOver());

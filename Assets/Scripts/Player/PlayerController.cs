@@ -75,7 +75,8 @@ public class PlayerController : MonoBehaviour
             health = Mathf.Min(maxHealth, health + roofRegenPerSecond * Time.deltaTime);
 
         if (Inp.Interact()) Interact();
-        if (Inp.Build()) PlaceTrap();
+        if (Inp.Build()) PlaceBuild();
+        if (Inp.CycleBuild()) Items.CycleBuild();
         if (Inp.Grapple()) Grapple();
         if (Inp.Use()) Hud.Toast(Items.UseBest());
     }
@@ -223,30 +224,20 @@ public class PlayerController : MonoBehaviour
         else Hud.Toast("No water left.");
     }
 
-    void PlaceTrap()
+    /// <summary>T: place the selected crafted kit (trap, snare, barricade or planter) in front of the player.</summary>
+    void PlaceBuild()
     {
-        if (!RoofZone.PlayerOnRoof) { Hud.Toast("Place traps on the roof."); return; }
-        if (!Items.Remove("trap_kit", 1)) { Hud.Toast("You need a trap kit. Craft one with Tab."); return; }
+        if (!RoofZone.PlayerOnRoof) { Hud.Toast("Place buildings on the roof."); return; }
+        string kit = Items.SelectedKit;
+        if (Items.Count(kit) <= 0)
+        {
+            Hud.Toast(Items.Def(kit).name + " needed. Craft one with Tab, or press R to pick another kit.");
+            return;
+        }
 
         Vector3 pos = transform.position + transform.forward * 2.2f;
         if (Physics.Raycast(pos + Vector3.up * 2f, Vector3.down, out var hit, 6f)) pos = hit.point;
 
-        var go = ModelLibrary.Spawn("cattle-grid", null, pos, transform.eulerAngles.y,
-                                    fitFootprint: 2.2f, keepAnimations: false);
-        if (go == null)
-        {
-            go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.transform.position = pos + Vector3.up * 0.08f;
-            go.transform.localScale = new Vector3(1f, 0.15f, 1f);
-            Destroy(go.GetComponent<Collider>());
-            RoofGenerator.Tint(go, new Color(0.75f, 0.15f, 0.1f));
-        }
-        go.name = "SpikeTrap";
-        var s = go.AddComponent<BaseStructure>();
-        s.id = "spike_trap";
-        s.defense = 10f;
-
-        Tutorial.Notify("trap");
-        Hud.Toast("Trap placed (+10 defense).");
+        if (Buildables.Place(kit, pos, transform.eulerAngles.y)) Items.Remove(kit, 1);
     }
 }

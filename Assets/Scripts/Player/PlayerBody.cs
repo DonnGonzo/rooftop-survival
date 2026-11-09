@@ -25,7 +25,8 @@ public class PlayerBody : MonoBehaviour
     GameObject model;
     Animation anim;
     Renderer[] renderers;
-    Transform headBone;
+    Transform headBone, rArm, rFore, rHand;
+    MeleeCombat melee;
     bool thirdPerson;
     string current = "";
     float turnUntil;
@@ -42,6 +43,10 @@ public class PlayerBody : MonoBehaviour
         anim = model.GetComponentInChildren<Animation>(true);
         renderers = model.GetComponentsInChildren<Renderer>(true);
         headBone = FindHeadBone(model.transform);
+        rArm = FindBoneAny(model.transform, "rightarm", "upperarm_r");
+        rFore = FindBoneAny(model.transform, "rightforearm", "lowerarm_r");
+        rHand = FindBoneAny(model.transform, "righthand", "hand_r");
+        melee = GetComponent<MeleeCombat>();
         ApplyView();
     }
 
@@ -60,13 +65,52 @@ public class PlayerBody : MonoBehaviour
     void ApplyView()
     {
         CameraFeel.viewOffset = thirdPerson ? thirdPersonOffset : Vector3.zero;
+        // First person: the body is not drawn (seen from inside, the mesh shows its inner faces and looks broken).
+        // It still casts a shadow, and third person (V) draws the whole character with its animations.
         if (renderers != null)
         {
             foreach (var r in renderers)
-                if (r != null) r.shadowCastingMode = ShadowCastingMode.On;
+                if (r != null) r.shadowCastingMode = thirdPerson ? ShadowCastingMode.On : ShadowCastingMode.ShadowsOnly;
         }
-        // The head is hidden in first person (its bone shrinks to nothing and the skin follows it).
-        if (headBone != null) headBone.localScale = thirdPerson ? Vector3.one : Vector3.zero;
+        if (headBone != null) headBone.localScale = Vector3.one;
+    }
+
+    /// <summary>
+    /// A punch on top of whatever clip is playing: while the melee swing runs, the right arm is aimed
+    /// forward along the player's facing, strongest at the middle of the swing. Runs after the Animation component.
+    /// </summary>
+    void LateUpdate()
+    {
+        if (model == null || melee == null || !melee.IsSwinging || rArm == null || rHand == null) return;
+
+        float w = Mathf.Sin(melee.SwingPhase * Mathf.PI);
+        if (w <= 0.001f) return;
+        Vector3 forward = transform.forward;
+
+        // Aim the upper arm: from its current direction toward the forward punch direction, by w.
+        Vector3 cur = ((rFore != null ? rFore.position : rHand.position) - rArm.position).normalized;
+        Vector3 aim = Vector3.Lerp(cur, forward, w * 0.9f).normalized;
+        rArm.rotation = Quaternion.Slerp(Quaternion.identity, Quaternion.FromToRotation(cur, aim), w) * rArm.rotation;
+
+        // Then the forearm, straightening the punch toward the same direction.
+        if (rFore != null)
+        {
+            Vector3 curF = (rHand.position - rFore.position).normalized;
+            Vector3 aimF = Vector3.Lerp(curF, forward, w).normalized;
+            rFore.rotation = Quaternion.Slerp(Quaternion.identity, Quaternion.FromToRotation(curF, aimF), w) * rFore.rotation;
+        }
+    }
+
+    /// <summary>Finds a bone whose name ends with one of the given suffixes (Mixamo "mixamorig:RightHand", UE "girl02:hand_r").</summary>
+    static Transform FindBoneAny(Transform root, params string[] suffixes)
+    {
+        foreach (var t in root.GetComponentsInChildren<Transform>(true))
+        {
+            string n = t.name.ToLowerInvariant();
+            foreach (var s in suffixes)
+                if (n.EndsWith(s)) return t;
+        }
+        return null;
     }
 
     /// <summary>The head bone of a rig. Mixamo names it "mixamorig:Head", the UE-style rig "girl02:head".</summary>

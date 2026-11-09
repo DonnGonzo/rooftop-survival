@@ -58,7 +58,10 @@ public static class Items
         new ItemDef("cloth", "Cloth", "Rags from the street. Makes bandages and rope."),
         new ItemDef("rope", "Rope", "Reserved for a reinforced grapple later."),
         new ItemDef("bandage", "Bandage", "Press Q to recover 30 health."),
-        new ItemDef("trap_kit", "Trap kit", "Press T on the roof to place a spike trap (+10 defense)."),
+        new ItemDef("trap_kit", "Trap kit", "Press T on the roof to place a spike trap (+10 defense). It catches wildlife until it breaks."),
+        new ItemDef("snare_kit", "Snare kit", "Press T on the roof to set a snare. It catches small wildlife until it breaks."),
+        new ItemDef("barricade_kit", "Barricade kit", "Press T on the roof to place a barricade (+15 defense)."),
+        new ItemDef("planter_kit", "Planter kit", "Press T on the roof to place a planter for crops."),
         new ItemDef("club", "Club", "Melee weapon. Equipped automatically while you carry it."),
     };
 
@@ -67,8 +70,22 @@ public static class Items
         new Recipe("bandage", 1, "cloth:2"),
         new Recipe("rope", 1, "cloth:2", "scrap:1"),
         new Recipe("trap_kit", 1, "scrap:2", "wood:1"),
+        new Recipe("snare_kit", 1, "rope:1", "wood:1"),
+        new Recipe("barricade_kit", 1, "wood:3", "scrap:2"),
+        new Recipe("planter_kit", 1, "wood:2", "scrap:1"),
         new Recipe("club", 1, "wood:3", "scrap:1"),
     };
+
+    /// <summary>Roof kits, in the order the R key cycles through them. T places the selected one.</summary>
+    public static readonly string[] BuildKits = { "trap_kit", "snare_kit", "barricade_kit", "planter_kit" };
+    public static int SelectedIndex;
+    public static string SelectedKit => BuildKits[SelectedIndex];
+
+    public static void CycleBuild()
+    {
+        SelectedIndex = (SelectedIndex + 1) % BuildKits.Length;
+        Hud.Toast("Selected: " + Def(SelectedKit).name + " (press T on the roof).");
+    }
 
     public static ItemDef Def(string id) => Defs.Find(d => d.id == id);
 

@@ -40,6 +40,12 @@ public class RoofGenerator : MonoBehaviour
         "barbed-wire-fence-section-a01906", "skated-jersey-barrier-7f0a04"
     };
 
+    // Loot containers scattered on the roof. Everything else is for the player to craft and place.
+    static readonly string[] LootKeys =
+    {
+        "loot-crate", "ammo-crate", "loot-sack", "tool-case", "treasure-chest"
+    };
+
     void Start()
     {
         if (RunManager.Instance != null) Generate(RunManager.Instance.Current);
@@ -111,16 +117,45 @@ public class RoofGenerator : MonoBehaviour
         }
         used.Add(new Vector3(fx, fz, 1.4f));
 
-        // Landmark on the far corner, cover along the parapet, then planters and loose clutter in the middle.
+        // Sparse roof: the landmark, a few loot containers and a little junk. Planters, cover and traps are crafted.
         SpawnLandmark(rng, w, d, used);
-        int cover = Mathf.RoundToInt(Mathf.Lerp(3f, 8f, q));
-        for (int i = 0; i < cover; i++) SpawnEdgeCover(rng, w, d, used);
 
-        int planters = Mathf.RoundToInt(Mathf.Lerp(1f, 6f, q));
-        for (int i = 0; i < planters; i++) SpawnPlanter(rng, w, d, used);
+        int loot = Mathf.RoundToInt(Mathf.Lerp(2f, 4f, q));
+        for (int i = 0; i < loot; i++) SpawnClutter(LootKeys, rng, w, d, used);
 
-        int clutter = Mathf.RoundToInt(Mathf.Lerp(10f, 2f, q)); // worse roof = more junk
-        for (int i = 0; i < clutter; i++) SpawnClutter(rng, w, d, used);
+        int junk = Mathf.RoundToInt(Mathf.Lerp(2f, 0f, q));   // worse roof = a bit more junk
+        for (int i = 0; i < junk; i++) SpawnClutter(ClutterKeys, rng, w, d, used);
+    }
+
+    /// <summary>A crafted planter placed at a spot on the roof. Parented to the roof root when one exists.</summary>
+    public static GameObject SpawnPlanterAt(Vector3 pos, float yaw)
+    {
+        GameObject go = ModelLibrary.Spawn("modular-planter-trough", null, pos, yaw, addCollider: true, keepAnimations: true);
+        if (go != null)
+        {
+            ModelLibrary.PlayClip(go, "tick");   // the plants sway in the wind
+            var plot = go.AddComponent<FarmPlot>();
+            var crop = FindDeep(go.transform, "planting");
+            if (crop != null) plot.SetCropVisual(crop);
+        }
+        else
+        {
+            go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.transform.position = pos + Vector3.up * 0.3f;
+            go.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+            go.transform.localScale = new Vector3(2.5f, 0.6f, 1f);
+            Tint(go, new Color(0.4f, 0.26f, 0.15f));
+            var plot = go.AddComponent<FarmPlot>();
+            var crop = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            Destroy(crop.GetComponent<Collider>());
+            crop.transform.SetParent(go.transform, false);
+            crop.transform.localPosition = new Vector3(0f, 1.2f, 0f);
+            crop.transform.localScale = Vector3.one * 0.5f;
+            Tint(crop, new Color(0.25f, 0.65f, 0.2f));
+            plot.SetCropVisual(crop.transform);
+        }
+        go.name = "Planter";
+        return go;
     }
 
     void SpawnPlanter(System.Random rng, float w, float d, List<Vector3> used)
@@ -158,9 +193,9 @@ public class RoofGenerator : MonoBehaviour
         if (!TryPlace(go.transform, r, rng, w, d, used, 2f)) Destroy(go);
     }
 
-    void SpawnClutter(System.Random rng, float w, float d, List<Vector3> used)
+    void SpawnClutter(string[] keys, System.Random rng, float w, float d, List<Vector3> used)
     {
-        string key = ClutterKeys[rng.Next(ClutterKeys.Length)];
+        string key = keys[rng.Next(keys.Length)];
         float yaw = (float)rng.NextDouble() * 360f;
         GameObject go = ModelLibrary.Spawn(key, roofRoot, Vector3.zero, yaw, addCollider: true, keepAnimations: false);
         float r;

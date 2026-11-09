@@ -20,6 +20,11 @@ public class MeleeCombat : MonoBehaviour
     /// <summary>0 = no chain, 1..3 = hits in the current chain (shown on the HUD).</summary>
     public static int ComboStep { get; private set; }
 
+    /// <summary>True while a swing is playing. The body uses it to add the punch on top of the other animations.</summary>
+    public bool IsSwinging => swinging;
+    /// <summary>0..1 progress through the current swing (0 when idle).</summary>
+    public float SwingPhase { get; private set; }
+
     static readonly float[] DamageMult = { 1f, 1.2f, 1.7f };
     static readonly float[] Duration = { 0.32f, 0.32f, 0.5f };
     static readonly Vector3[] StartRot =
@@ -110,12 +115,14 @@ public class MeleeCombat : MonoBehaviour
         {
             t = Mathf.Min(1f, t + Time.deltaTime / dur);
             float eased = 1f - Mathf.Pow(1f - t, 3f);
+            SwingPhase = t;
             pivot.localRotation = Quaternion.Slerp(a, b, eased);
             float push = lunge ? Mathf.Sin(t * Mathf.PI) * 0.25f : 0f;
             pivot.localPosition = restPos + new Vector3(0f, 0f, push);
             yield return null;
         }
         swinging = false;
+        SwingPhase = 0f;
     }
 
     IEnumerator HitAfter(float delay, float dmg, bool heavy)
