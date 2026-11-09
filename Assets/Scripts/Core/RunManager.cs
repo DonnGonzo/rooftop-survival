@@ -21,6 +21,7 @@ public class RunData
     public float hour = 7f;
     public int food, water, wood, scrap;
     public float roofQuality;               // 0 (terrible) .. 1 (great)
+    public List<ItemStack> items = new List<ItemStack>();   // crafted and found items (not food/water/wood/scrap)
     public List<PlacedStructure> structures = new List<PlacedStructure>();
 }
 
@@ -34,12 +35,13 @@ public class RunManager : MonoBehaviour
     public RunData Current { get; private set; }
 
     string SavePath => Path.Combine(Application.persistentDataPath, "run.json");
+    public bool HasSave => File.Exists(SavePath);
 
+    // Not DontDestroyOnLoad: each scene load rebuilds the managers and reloads the run from disk,
+    // which keeps a single instance and avoids two RunManagers fighting after a reload.
     void Awake()
     {
-        if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
-        DontDestroyOnLoad(gameObject);
         LoadOrStart();
     }
 

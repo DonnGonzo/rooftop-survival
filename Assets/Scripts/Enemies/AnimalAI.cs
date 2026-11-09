@@ -1,9 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// Simple street wildlife. Wanders; chases and bites the player when they are at street level.
+/// Street wildlife. Wanders, then chases and bites the player when they are at street level.
 /// Aggro range grows at night. "Lurkers" stay near their home spot (the shade at building bases).
-/// If the model faces the wrong way when walking, change yawOffset (try 180).
+/// If a model walks backwards, set yawOffset to 180.
 /// </summary>
 public class AnimalAI : MonoBehaviour
 {
@@ -15,21 +15,26 @@ public class AnimalAI : MonoBehaviour
     public float yawOffset = 0f;
     public float streetY = -90f;
 
-    const float KeepOutRadius = 18f;   // don't wander into the player's own building
+    const float KeepOutRadius = 18f;   // never wander into the player's own building
 
     Vector3 home, target;
     float nextPick, nextBite, idleUntil;
     string anim = "";
+    Health hp;
 
     void Start()
     {
         home = transform.position;
+        hp = GetComponent<Health>();
+        if (hp == null) hp = gameObject.AddComponent<Health>();   // wildlife can be killed for loot
         Pick();
         SetAnim("idle");
     }
 
     void Update()
     {
+        if (GameState.Frozen || (hp != null && hp.Dead)) return;
+
         var p = PlayerController.Instance;
         bool chasing = false;
 
@@ -60,7 +65,11 @@ public class AnimalAI : MonoBehaviour
 
     void Wander()
     {
-        if (Time.time < idleUntil) { SetAnim("idle"); return; }
+        if (Time.time < idleUntil)
+        {
+            SetAnim("idle");
+            return;
+        }
 
         Vector3 to = target - transform.position;
         to.y = 0f;
@@ -87,12 +96,12 @@ public class AnimalAI : MonoBehaviour
         Vector3 pos = transform.position + dir * speed * Time.deltaTime;
         pos.y = streetY;
 
-        // keep out of the player's building footprint
         Vector2 flat = new Vector2(pos.x, pos.z);
         if (flat.magnitude < KeepOutRadius)
         {
             flat = flat.normalized * KeepOutRadius;
-            pos.x = flat.x; pos.z = flat.y;
+            pos.x = flat.x;
+            pos.z = flat.y;
         }
         transform.position = pos;
 
@@ -105,7 +114,6 @@ public class AnimalAI : MonoBehaviour
     {
         if (anim == clip) return;
         anim = clip;
-        // fall back to "walk" if a model has no "run"
         if (!ModelLibrary.PlayClip(gameObject, clip) && clip == "run") ModelLibrary.PlayClip(gameObject, "walk");
     }
 }

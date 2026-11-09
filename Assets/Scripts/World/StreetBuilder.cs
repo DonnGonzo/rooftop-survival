@@ -23,7 +23,26 @@ public static class StreetBuilder
 
     struct Footprint { public Vector2 pos; public float r; }
 
+    /// <summary>Short status line shown in the HUD, handy when debugging a build.</summary>
+    public static string Diag = "";
+    static int buildingCount;
+
     public static void Build(int seed)
+    {
+        buildingCount = 0;
+        try
+        {
+            BuildInternal(seed);
+            Diag = "Models OK, buildings: " + buildingCount;
+        }
+        catch (System.Exception e)
+        {
+            Diag = "City build failed: " + e.Message;
+            Debug.LogError("[StreetBuilder] " + e);
+        }
+    }
+
+    static void BuildInternal(int seed)
     {
         var rng = new System.Random(seed + 1);
         var city = new GameObject("City");
@@ -65,6 +84,7 @@ public static class StreetBuilder
             if (!ok) { Object.Destroy(b); continue; }
 
             placed.Add(new Footprint { pos = pos, r = radius });
+            buildingCount++;
             b.transform.localPosition = new Vector3(pos.x, StreetY, pos.y);
             b.transform.localScale = new Vector3(s, s * yStretch, s);
             Mossify(b, (float)rng.NextDouble());
@@ -90,6 +110,7 @@ public static class StreetBuilder
             if (g != null) g.transform.localScale *= Mathf.Lerp(1f, 2.2f, (float)rng.NextDouble());
         }
 
+        StreetDecor.Build(seed, city.transform);
         SpawnWildlife(rng, city.transform, placed);
     }
 

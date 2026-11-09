@@ -1,20 +1,22 @@
 using UnityEngine;
 
 /// <summary>
-/// Builds a playable scene in code when you press Play in any scene that has no GameClock:
-/// managers, sun, random roof, city, player and HUD.
-/// Once you hand-build a real scene (with a GameClock in it) this does nothing.
+/// Builds the game scene in code when you press Play: managers, sun, roof, city, decor,
+/// player, combat and UI. The start menu opens on top. Only runs if no GameClock exists yet.
 /// </summary>
 public static class SceneBootstrap
 {
+    static bool roofHooked;
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Init()
     {
         if (Object.FindAnyObjectByType<GameClock>() != null) return;
+        GameSettings.ApplyVolume();
 
         // Managers
         var mgr = new GameObject("Managers");
-        mgr.AddComponent<RunManager>();      // Awake loads or creates the run
+        mgr.AddComponent<RunManager>();          // loads or creates the run
         var run = RunManager.Instance.Current;
 
         // Sun
@@ -33,13 +35,25 @@ public static class SceneBootstrap
         clock.sunColor = MakeSunGradient();
         mgr.AddComponent<NightDirector>();
         mgr.AddComponent<Hud>();
+        mgr.AddComponent<InventoryUI>();
+        mgr.AddComponent<MainMenu>();
+
+        // Tutorial step for "be back on the roof before dusk"
+        if (!roofHooked)
+        {
+            roofHooked = true;
+            GameClock.OnDuskWarning += d =>
+            {
+                if (RoofZone.PlayerOnRoof) Tutorial.Notify("roof");
+            };
+        }
 
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.Exponential;
         RenderSettings.fogDensity = 0.003f;
         RenderSettings.fogColor = new Color(0.55f, 0.6f, 0.62f);
 
-        // Roof + zone
+        // Roof and zone
         var roof = new GameObject("Roof");
         var gen = roof.AddComponent<RoofGenerator>();
         gen.roofRoot = roof.transform;
@@ -49,12 +63,15 @@ public static class SceneBootstrap
         zoneGo.AddComponent<RoofZone>();
         gen.zoneCollider = box;
 
-        // City: real models if they are imported, otherwise grey boxes
-        if (ModelLibrary.Available) StreetBuilder.Build(run.seed);
+        // City: Polyfork models if imported, otherwise grey boxes
+        if (ModelLibrary.Available)
+        {
+            StreetBuilder.Build(run.seed);
+        }
         else
         {
             BuildGreyboxCity(run.seed);
-            Hud.Toast("Models not found - move the .glb files to Assets/Resources/Models (see README).");
+            StreetBuilder.Diag = "Models NOT found in Resources/Models (greybox city)";
         }
 
         // Player
@@ -65,7 +82,9 @@ public static class SceneBootstrap
         p.tag = "Player";
         p.transform.position = new Vector3(0f, 0.3f, 0f);
         var cc = p.AddComponent<CharacterController>();
-        cc.height = 1.8f; cc.radius = 0.35f; cc.center = new Vector3(0f, 0.9f, 0f);
+        cc.height = 1.8f;
+        cc.radius = 0.35f;
+        cc.center = new Vector3(0f, 0.9f, 0f);
 
         var camGo = new GameObject("PlayerCam");
         camGo.tag = "MainCamera";
@@ -78,6 +97,20 @@ public static class SceneBootstrap
 
         var pc = p.AddComponent<PlayerController>();
         pc.cam = camGo.transform;
+        var melee = p.AddComponent<MeleeCombat>();
+        melee.cam = camGo.transform;
+
+        // Start frozen behind the menu, unless New Run / a reload asked to skip it
+        GameState.Playing = false;
+        GameState.MenuOpen = true;
+        GameState.UiOpen = false;
+        if (GameState.AutoStart)
+        {
+            GameState.AutoStart = false;
+            GameState.MenuOpen = false;
+            GameState.Playing = true;
+            GameState.HasStarted = true;
+        }
     }
 
     static void BuildGreyboxCity(int seed)

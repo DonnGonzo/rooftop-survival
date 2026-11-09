@@ -1,6 +1,7 @@
+using System.Text;
 using UnityEngine;
 
-/// <summary>Quick OnGUI heads-up display. Replace with proper UI later.</summary>
+/// <summary>On-screen status, tutorial prompts, toasts and health. Replace with proper UI later.</summary>
 public class Hud : MonoBehaviour
 {
     static string toast = "";
@@ -22,8 +23,9 @@ public class Hud : MonoBehaviour
 
     void Update()
     {
+        GameState.Refresh();
         if (GameClock.Instance != null)
-            GameClock.Instance.timeScale = Inp.FastForward() ? 15f : 1f;
+            GameClock.Instance.timeScale = GameState.Frozen ? 0f : (Inp.FastForward() ? 15f : 1f);
     }
 
     void OnGUI()
@@ -39,7 +41,7 @@ public class Hud : MonoBehaviour
         var clock = GameClock.Instance;
         var run = RunManager.Instance != null ? RunManager.Instance.Current : null;
         var player = PlayerController.Instance;
-        if (clock == null || run == null) return;
+        if (clock == null || run == null || !GameState.Playing || GameState.MenuOpen) return;
 
         int h = Mathf.FloorToInt(clock.Hour);
         int m = Mathf.FloorToInt((clock.Hour % 1f) * 60f);
@@ -47,22 +49,51 @@ public class Hud : MonoBehaviour
         string where = player != null && player.OnStreet ? "STREET" : "ROOF";
         GUI.Label(new Rect(16, 12, 600, 30), $"Day {clock.Day}   {h:00}:{m:00}   {phase}   [{where}]", big);
 
-        GUI.Label(new Rect(16, 44, 900, 26),
+        GUI.Label(new Rect(16, 44, 1000, 26),
             $"Food {run.food}   Water {run.water}   Wood {run.wood}   Scrap {run.scrap}   " +
-            $"Defense {BaseStructure.TotalDefense():F0}   Roof quality {(run.roofQuality * 100f):F0}%" +
-            (player != null ? $"   Health {player.health:F0}/{player.maxHealth:F0}" : ""), small);
+            $"Defense {BaseStructure.TotalDefense():F0}   Roof quality {(run.roofQuality * 100f):F0}%", small);
+
+        var sb = new StringBuilder();
+        foreach (var d in Items.Defs)
+        {
+            if (d.id == "food" || d.id == "water" || d.id == "wood" || d.id == "scrap") continue;
+            int n = Items.Count(d.id);
+            if (n > 0) sb.Append(d.name).Append(" x").Append(n).Append("    ");
+        }
+        string weapon = Items.Count("club") > 0 ? "Club" : "Fists";
+        string combo = MeleeCombat.ComboStep > 0 ? "    Combo x" + MeleeCombat.ComboStep : "";
+        GUI.Label(new Rect(16, 66, 1100, 26), sb.ToString() + "Weapon: " + weapon + combo, small);
 
         int safe = Mathf.Max(0, 11 - clock.Day);
-        string danger = safe > 0 ? $"Safe nights remaining: {safe}" : "Attacks are possible every night!";
-        GUI.Label(new Rect(16, 68, 500, 26), danger, small);
+        GUI.Label(new Rect(16, 88, 600, 26),
+            safe > 0 ? $"Safe nights remaining: {safe}" : "Attacks are possible every night!", small);
+
+        if (Tutorial.Active)
+            GUI.Label(new Rect(16, 116, 1100, 30), "TUTORIAL: " + Tutorial.Current, big);
 
         if (!clock.IsNight && clock.Hour >= clock.warningHour && !RoofZone.PlayerOnRoof)
-            GUI.Label(new Rect(Screen.width / 2f - 220, 90, 440, 36), "RETURN TO THE ROOF - night is coming!", big);
+            GUI.Label(new Rect(Screen.width / 2f - 260, 150, 520, 36), "RETURN TO THE ROOF - night is coming!", big);
+
+        if (player != null) DrawHealthBar(player.health, player.maxHealth);
+
+        GUI.Label(new Rect(Screen.width / 2f - 6, Screen.height / 2f - 12, 20, 24), "+", big);
 
         if (Time.time < toastUntil)
-            GUI.Label(new Rect(Screen.width / 2f - 400, Screen.height - 90, 800, 30), toast, big);
+            GUI.Label(new Rect(Screen.width / 2f - 400, Screen.height - 96, 800, 30), toast, big);
 
-        GUI.Label(new Rect(16, Screen.height - 28, 1100, 24),
-            "WASD move  Shift sprint  Space jump  E plant/water/harvest  T trap (2 wood)  G grapple down/up  Hold N fast-forward", small);
+        GUI.Label(new Rect(16, Screen.height - 28, 1200, 24),
+            "WASD move  Shift sprint  Space jump  E interact  Tab crafting  LMB attack (chain for combo)  RMB heavy  T trap  G rappel  Q use  Esc menu  Hold N fast-forward", small);
+        GUI.Label(new Rect(16, Screen.height - 52, 900, 22), "[debug] " + StreetBuilder.Diag, small);
+    }
+
+    void DrawHealthBar(float hp, float max)
+    {
+        var bg = new Rect(16, Screen.height - 84, 240, 18);
+        GUI.color = new Color(0f, 0f, 0f, 0.6f);
+        GUI.DrawTexture(bg, Texture2D.whiteTexture);
+        GUI.color = new Color(0.8f, 0.15f, 0.15f);
+        GUI.DrawTexture(new Rect(bg.x, bg.y, bg.width * Mathf.Clamp01(hp / max), bg.height), Texture2D.whiteTexture);
+        GUI.color = Color.white;
+        GUI.Label(new Rect(bg.x + 6, bg.y - 2, 240, 22), "Health " + hp.ToString("F0") + "/" + max.ToString("F0"), small);
     }
 }

@@ -2,10 +2,10 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// First-person controller + roof actions.
-/// WASD move, mouse look, Shift sprint, Space jump,
-/// E = plant / water / harvest nearest planter, T = place a trap (2 wood),
-/// G = grapple down at the roof edge / climb back up at the base of your building.
+/// First-person controller and roof actions.
+/// WASD move, mouse look, Shift sprint, Space jump, E = pick up / plant / water / harvest,
+/// T = place a spike trap (needs a trap kit), G = rappel down or climb up, Q = use a bandage or food.
+/// Melee is in MeleeCombat (left click, right click).
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
@@ -14,17 +14,14 @@ public class PlayerController : MonoBehaviour
 
     public Transform cam;
     public float walkSpeed = 4.5f, sprintSpeed = 7f, jumpSpeed = 5f, gravity = -18f;
-    public float sensitivity = 1.2f, reach = 3.5f;
-    public int trapWoodCost = 2;
-
-    [Header("Health")]
+    public float reach = 3.5f;
     public float maxHealth = 100f;
     public float health = 100f;
     public float roofRegenPerSecond = 3f;
     [Range(0f, 1f)] public float deathSupplyLoss = 0.25f;
 
-    public bool OnStreet { get { return transform.position.y < StreetBand; } }
-    static float StreetBand { get { return StreetBuilder.StreetY + 8f; } }
+    public bool OnStreet => transform.position.y < StreetBand;
+    static float StreetBand => StreetBuilder.StreetY + 8f;
 
     CharacterController cc;
     float pitch, velY;
@@ -34,25 +31,25 @@ public class PlayerController : MonoBehaviour
     {
         Instance = this;
         cc = GetComponent<CharacterController>();
+        var c = Characters.Current;
+        maxHealth = c.maxHealth;
         health = maxHealth;
-    }
-
-    void Start()
-    {
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        walkSpeed *= c.moveMult;
+        sprintSpeed *= c.moveMult;
     }
 
     void Update()
     {
-        var look = Inp.Look() * sensitivity;
+        if (GameState.Frozen || busy) return;
+
+        var look = Inp.Look() * GameSettings.Sensitivity;
         transform.Rotate(0f, look.x, 0f);
-        pitch = Mathf.Clamp(pitch - look.y, -85f, 85f);
+        float dy = GameSettings.InvertY ? -look.y : look.y;
+        pitch = Mathf.Clamp(pitch - dy, -85f, 85f);
         if (cam != null) cam.localRotation = Quaternion.Euler(pitch, 0f, 0f);
 
-        if (busy) return;
-
         var m = Inp.Move();
+        if (m.magnitude > 0.5f) Tutorial.Notify("move");
         Vector3 dir = transform.right * m.x + transform.forward * m.y;
         float speed = Inp.Sprint() ? sprintSpeed : walkSpeed;
 
@@ -71,15 +68,18 @@ public class PlayerController : MonoBehaviour
         if (Inp.Interact()) Interact();
         if (Inp.Build()) PlaceTrap();
         if (Inp.Grapple()) Grapple();
+        if (Inp.Use()) Hud.Toast(Items.UseBest());
     }
 
     // ---------------------------------------------------------------- health
 
+    public void Heal(float amount) { health = Mathf.Min(maxHealth, health + amount); }
+
     public void TakeDamage(float amount, string source)
     {
-        if (health <= 0f) return;
+        if (GameState.Frozen || health <= 0f) return;
         health -= amount;
-        Hud.Toast("Hit by " + source.Replace("(Clone)", "") + "! (-" + amount.ToString("F0") + ")");
+        Hud.Toast("Hit by " + source.Replace("(Clone)", "") + " (-" + amount.ToString("F0") + ")");
         if (health <= 0f) Die("You were mauled on the street.");
     }
 
@@ -105,7 +105,7 @@ public class PlayerController : MonoBehaviour
         Hud.Toast(why + " You wake on the roof and lost some supplies.");
     }
 
-    // ---------------------------------------------------------------- grapple
+    // ---------------------------------------------------------------- rappel
 
     void Grapple()
     {
@@ -118,15 +118,19 @@ public class PlayerController : MonoBehaviour
         {
             if (!RoofZone.PlayerOnRoof) return;
             float dx = hx - Mathf.Abs(p.x), dz = hz - Mathf.Abs(p.z);
-            if (Mathf.Min(dx, dz) > 3.5f) { Hud.Toast("Walk to the roof edge to grapple down."); return; }
+            if (Mathf.Min(dx, dz) > 3.5f) { Hud.Toast("Walk to the roof edge to rappel down."); return; }
 
-            Vector3 outward = dx < dz ? new Vector3(Mathf.Sign(p.x), 0f, 0f) : new Vector3(0f, 0f, Mathf.Sign(p.z));
-            Vector3 hook = dx < dz
+            bool sideX = dx < dz;
+            Vector3 outward = sideX ? new Vector3(Mathf.Sign(p.x), 0f, 0f) : new Vector3(0f, 0f, Mathf.Sign(p.z));
+            Vector3 hook = sideX
                 ? new Vector3(Mathf.Sign(p.x) * (hx + 1.2f), 0.3f, p.z)
                 : new Vector3(p.x, 0.3f, Mathf.Sign(p.z) * (hz + 1.2f));
             Vector3 ground = new Vector3(hook.x, StreetBuilder.StreetY + 0.3f, hook.z) + outward * 3f;
-            StartCoroutine(Travel(new[] { hook, new Vector3(hook.x, StreetBuilder.StreetY + 0.3f, hook.z), ground },
-                                  new[] { 0.6f, 4f, 0.6f }, "Rappelling down. Be back before dark!"));
+
+            Tutorial.Notify("rappel");
+            StartCoroutine(Travel(
+                new[] { hook, new Vector3(hook.x, StreetBuilder.StreetY + 0.3f, hook.z), ground },
+                new[] { 0.6f, 4f, 0.6f }, "Rappelling down. Be back before dark!"));
         }
         else
         {
@@ -158,7 +162,7 @@ public class PlayerController : MonoBehaviour
             while (t < 1f)
             {
                 t += Time.deltaTime / durations[i];
-                transform.position = Vector3.Lerp(a, b, Mathf.SmoothStep(0f, 1f, t));
+                transform.position = Vector3.Lerp(a, b, Mathf.SmoothStep(0f, 1f, Mathf.Min(t, 1f)));
                 yield return null;
             }
         }
@@ -167,12 +171,19 @@ public class PlayerController : MonoBehaviour
         busy = false;
     }
 
-    // ---------------------------------------------------------------- roof actions
+    // ---------------------------------------------------------------- roof and street actions
 
     void Interact()
     {
+        var pk = Pickup.Nearest(transform.position, 2.6f);
+        if (pk != null)
+        {
+            pk.Take();
+            return;
+        }
+
         FarmPlot best = null;
-        float bestDist = reach + 1.5f;   // planters are long, measure from the middle
+        float bestDist = reach + 1.5f;   // planters are long, so measure from their middle
         foreach (var p in FindObjectsByType<FarmPlot>())
         {
             float d = Vector3.Distance(transform.position, p.transform.position);
@@ -180,24 +191,36 @@ public class PlayerController : MonoBehaviour
         }
         if (best == null) { Hud.Toast("Nothing to interact with."); return; }
 
-        if (best.Stage == -1) { best.Plant(); Hud.Toast("Planted."); }
-        else if (best.Ready) { Hud.Toast("Harvested +" + best.Harvest() + " food."); }
-        else if (best.Watered) { Hud.Toast("Already watered today."); }
-        else if (best.Water()) { Hud.Toast("Watered (-1 water)."); }
-        else { Hud.Toast("No water left."); }
+        if (best.Stage == -1)
+        {
+            best.Plant();
+            Hud.Toast("Planted.");
+            Tutorial.Notify("plant");
+        }
+        else if (best.Ready)
+        {
+            int bonus = Characters.Current.planterBonus;
+            int got = best.Harvest() + bonus;   // Harvest() already adds the crop yield
+            if (bonus > 0) Items.Add("food", bonus);
+            Hud.Toast("Harvested +" + got + " food.");
+        }
+        else if (best.Watered) Hud.Toast("Already watered today.");
+        else if (best.Water())
+        {
+            Hud.Toast("Watered (-1 water).");
+            Tutorial.Notify("water");
+        }
+        else Hud.Toast("No water left.");
     }
 
     void PlaceTrap()
     {
-        var run = RunManager.Instance != null ? RunManager.Instance.Current : null;
-        if (run == null) return;
-        if (!RoofZone.PlayerOnRoof) { Hud.Toast("Build on the roof."); return; }
-        if (run.wood < trapWoodCost) { Hud.Toast("Need " + trapWoodCost + " wood."); return; }
+        if (!RoofZone.PlayerOnRoof) { Hud.Toast("Place traps on the roof."); return; }
+        if (!Items.Remove("trap_kit", 1)) { Hud.Toast("You need a trap kit. Craft one with Tab."); return; }
 
         Vector3 pos = transform.position + transform.forward * 2.2f;
         if (Physics.Raycast(pos + Vector3.up * 2f, Vector3.down, out var hit, 6f)) pos = hit.point;
 
-        run.wood -= trapWoodCost;
         var go = ModelLibrary.Spawn("cattle-grid", null, pos, transform.eulerAngles.y,
                                     fitFootprint: 2.2f, keepAnimations: false);
         if (go == null)
@@ -212,6 +235,8 @@ public class PlayerController : MonoBehaviour
         var s = go.AddComponent<BaseStructure>();
         s.id = "spike_trap";
         s.defense = 10f;
+
+        Tutorial.Notify("trap");
         Hud.Toast("Trap placed (+10 defense).");
     }
 }
