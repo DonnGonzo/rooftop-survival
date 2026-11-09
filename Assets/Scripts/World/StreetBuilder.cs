@@ -177,7 +177,7 @@ public static class StreetBuilder
             if (go == null) return; // model missing, skip this species
             var ai = go.AddComponent<AnimalAI>();
             ai.walkSpeed = walk; ai.runSpeed = run; ai.aggroRadius = aggro;
-            ai.biteDamage = damage; ai.lurker = lurker; ai.streetY = StreetY;
+            ai.biteDamage = damage; ai.lurker = lurker; ai.groundY = StreetY;
         }
     }
 
