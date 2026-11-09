@@ -37,6 +37,7 @@ public static class SceneBootstrap
         mgr.AddComponent<Hud>();
         mgr.AddComponent<InventoryUI>();
         mgr.AddComponent<MainMenu>();
+        new GameObject("Sky").AddComponent<SkyController>();
 
         // Tutorial step for "be back on the roof before dusk"
         if (!roofHooked)
@@ -50,7 +51,7 @@ public static class SceneBootstrap
 
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.Exponential;
-        RenderSettings.fogDensity = 0.003f;
+        RenderSettings.fogDensity = 0.0012f;   // lighter fog so the sky disks stay visible
         RenderSettings.fogColor = new Color(0.55f, 0.6f, 0.62f);
 
         // Roof and zone
@@ -92,8 +93,9 @@ public static class SceneBootstrap
         camGo.transform.localPosition = new Vector3(0f, 1.65f, 0f);
         var cam = camGo.AddComponent<Camera>();
         cam.nearClipPlane = 0.1f;
-        cam.farClipPlane = 800f;
+        cam.farClipPlane = 1200f;   // the sun, moon and clouds sit about 650 m out
         camGo.AddComponent<AudioListener>();
+        camGo.AddComponent<CameraFeel>();
 
         var pc = p.AddComponent<PlayerController>();
         pc.cam = camGo.transform;

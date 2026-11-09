@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
@@ -56,11 +57,37 @@ public class AnimalAI : MonoBehaviour
                 {
                     nextBite = Time.time + biteCooldown;
                     p.TakeDamage(biteDamage, name);
+                    StartCoroutine(Lunge());
                 }
             }
         }
 
         if (!chasing) Wander();
+    }
+
+    /// <summary>Quick forward snap of the model when it bites, then it settles back. Only the visual moves, not the collider.</summary>
+    IEnumerator Lunge()
+    {
+        if (transform.childCount == 0) yield break;
+        var body = transform.GetChild(0);
+        Vector3 rest = body.localPosition;
+        Vector3 fwd = rest + Vector3.forward * 0.35f;
+
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.deltaTime / 0.12f;
+            body.localPosition = Vector3.Lerp(rest, fwd, t);
+            yield return null;
+        }
+        t = 0f;
+        while (t < 1f)
+        {
+            t += Time.deltaTime / 0.25f;
+            body.localPosition = Vector3.Lerp(fwd, rest, t);
+            yield return null;
+        }
+        body.localPosition = rest;
     }
 
     void Wander()

@@ -60,8 +60,9 @@ public static class StreetBuilder
         for (int i = 0; i < 60; i++)
         {
             string key = BuildingKeys[rng.Next(BuildingKeys.Length)];
+            // No collider on the facade: the interior room below provides walls and a doorway instead.
             var b = ModelLibrary.Spawn(key, city.transform, Vector3.zero, rng.Next(4) * 90f,
-                                       addCollider: true, keepAnimations: false);
+                                       addCollider: false, keepAnimations: false);
             if (b == null) continue;
 
             var lb = ModelLibrary.LocalBounds(b.transform);
@@ -88,6 +89,7 @@ public static class StreetBuilder
             b.transform.localPosition = new Vector3(pos.x, StreetY, pos.y);
             b.transform.localScale = new Vector3(s, s * yStretch, s);
             Mossify(b, (float)rng.NextDouble());
+            BuildingInterior.Build(city.transform, pos, radius, rng, StreetY);
         }
 
         // Wrecked vehicles and overgrowth on the street
@@ -106,8 +108,23 @@ public static class StreetBuilder
             float dist = Mathf.Lerp(18f, 130f, (float)rng.NextDouble());
             var g = ModelLibrary.Spawn(PlantKeys[rng.Next(PlantKeys.Length)], city.transform,
                                        new Vector3(Mathf.Cos(ang) * dist, StreetY, Mathf.Sin(ang) * dist),
-                                       (float)rng.NextDouble() * 360f, keepAnimations: false);
-            if (g != null) g.transform.localScale *= Mathf.Lerp(1f, 2.2f, (float)rng.NextDouble());
+                                       (float)rng.NextDouble() * 360f, keepAnimations: true);
+            if (g == null) continue;
+            ModelLibrary.PlayClip(g, "tick");                  // the blades' own sway clip
+            g.AddComponent<WindSway>().amplitude = 3f;
+            g.transform.localScale *= Mathf.Lerp(1f, 2.2f, (float)rng.NextDouble());
+        }
+
+        // Trees: the swing tree has a 'tick' clip for its leaves, plus a slow sway of the whole tree.
+        for (int i = 0; i < 14; i++)
+        {
+            Vector2 tp = FreeStreetPoint(rng, placed, 3f, 18f, 110f);
+            var t = ModelLibrary.Spawn("lakeside-swing-tree", city.transform, new Vector3(tp.x, StreetY, tp.y),
+                                       (float)rng.NextDouble() * 360f, fitHeight: 9f, keepAnimations: true);
+            if (t == null) continue;
+            ModelLibrary.PlayClip(t, "tick");
+            t.AddComponent<WindSway>().amplitude = 1.2f;
+            placed.Add(new Footprint { pos = tp, r = 3f });
         }
 
         StreetDecor.Build(seed, city.transform);

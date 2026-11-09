@@ -93,7 +93,11 @@ public class RoofGenerator : MonoBehaviour
 
         float fx = -w / 2f + 3f, fz = -d / 2f + 3f;
         var fire = ModelLibrary.Spawn("open-campfire", roofRoot, new Vector3(fx, 0f, fz));
-        if (fire != null) ModelLibrary.PlayClip(fire, "tick");
+        if (fire != null)
+        {
+            ModelLibrary.PlayClip(fire, "tick");
+            fire.AddComponent<FireFlicker>();
+        }
         used.Add(new Vector3(fx, fz, 1.4f));
 
         int planters = Mathf.RoundToInt(Mathf.Lerp(1f, 6f, q));
@@ -107,11 +111,12 @@ public class RoofGenerator : MonoBehaviour
     {
         float yaw = rng.Next(2) * 90f;
         GameObject go = ModelLibrary.Spawn("modular-planter-trough", roofRoot, Vector3.zero, yaw,
-                                           addCollider: true, keepAnimations: false);
+                                           addCollider: true, keepAnimations: true);
         float r = 2.2f;
         FarmPlot plot;
         if (go != null)
         {
+            ModelLibrary.PlayClip(go, "tick");   // the plants on the planter sway in the wind
             plot = go.AddComponent<FarmPlot>();
             var crop = FindDeep(go.transform, "planting");
             if (crop != null) plot.SetCropVisual(crop);
@@ -220,9 +225,10 @@ public class RoofGenerator : MonoBehaviour
     }
 
     static Material templateMat;
+    static Material plainMat;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetShader() { litShader = null; templateMat = null; }
+    static void ResetShader() { litShader = null; templateMat = null; plainMat = null; }
 
     /// <summary>
     /// A material known to render correctly in this project: the one a Polyfork model already uses
@@ -245,17 +251,30 @@ public class RoofGenerator : MonoBehaviour
         var r = go.GetComponent<Renderer>();
         if (r == null) return;
 
-        var t = GetTemplate();
-        var m = t != null ? new Material(t) : new Material(GetLitShader());
+        // 1) A material asset shipped in Resources (always included in builds, no shader lookup at runtime)
+        if (plainMat == null) plainMat = Resources.Load<Material>("Materials/Plain");
+
+        Material m;
+        bool borrowed = false;
+        if (plainMat != null) m = new Material(plainMat);
+        else
+        {
+            // 2) borrow a model's material, 3) pipeline default shader
+            var t = GetTemplate();
+            borrowed = t != null;
+            m = borrowed ? new Material(t) : new Material(GetLitShader());
+        }
 
         string prop = m.HasProperty("_BaseColor") ? "_BaseColor"
                     : m.HasProperty("baseColorFactor") ? "baseColorFactor"
                     : m.HasProperty("_Color") ? "_Color" : null;
         if (prop != null) m.SetColor(prop, c);
 
-        // plain colour, no texture from the borrowed material
-        if (m.HasProperty("baseColorTexture")) m.SetTexture("baseColorTexture", Texture2D.whiteTexture);
-        if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", Texture2D.whiteTexture);
+        if (borrowed)
+        {
+            if (m.HasProperty("baseColorTexture")) m.SetTexture("baseColorTexture", Texture2D.whiteTexture);
+            if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", Texture2D.whiteTexture);
+        }
 
         r.sharedMaterial = m;
     }

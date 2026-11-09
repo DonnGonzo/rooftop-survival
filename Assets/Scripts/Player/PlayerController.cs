@@ -21,6 +21,13 @@ public class PlayerController : MonoBehaviour
     [Range(0f, 1f)] public float deathSupplyLoss = 0.25f;
 
     public bool OnStreet => transform.position.y < StreetBand;
+
+    // Read by CameraFeel for head bob, landing and sprint effects.
+    public float Pitch => pitch;
+    public float VerticalSpeed => velY;
+    public bool Grounded => cc != null && cc.isGrounded;
+    public float HorizontalSpeed { get; private set; }
+    public bool Sprinting { get; private set; }
     static float StreetBand => StreetBuilder.StreetY + 8f;
 
     CharacterController cc;
@@ -57,6 +64,8 @@ public class PlayerController : MonoBehaviour
         if (cc.isGrounded && Inp.Jump()) velY = jumpSpeed;
         velY += gravity * Time.deltaTime;
         cc.Move((dir * speed + Vector3.up * velY) * Time.deltaTime);
+        HorizontalSpeed = new Vector2(cc.velocity.x, cc.velocity.z).magnitude;
+        Sprinting = m.magnitude > 0.5f && Inp.Sprint();
 
         float y = transform.position.y;
         if (y < -12f && y > StreetBand) Die("You fell off the roof!");
@@ -79,6 +88,7 @@ public class PlayerController : MonoBehaviour
     {
         if (GameState.Frozen || health <= 0f) return;
         health -= amount;
+        CameraFeel.Shake(Mathf.Clamp01(amount / 25f));
         Hud.Toast("Hit by " + source.Replace("(Clone)", "") + " (-" + amount.ToString("F0") + ")");
         if (health <= 0f) Die("You were mauled on the street.");
     }

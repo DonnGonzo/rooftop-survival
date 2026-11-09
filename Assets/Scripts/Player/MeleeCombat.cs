@@ -90,6 +90,7 @@ public class MeleeCombat : MonoBehaviour
 
         busyUntil = now + dur;
         lastHit = now;
+        CameraFeel.Kick(heavy ? 6f : 2.5f);   // the view jolts with each swing
         ComboStep = heavy ? 0 : combo + 1;
         combo = heavy ? 0 : (combo + 1) % 3;
 
