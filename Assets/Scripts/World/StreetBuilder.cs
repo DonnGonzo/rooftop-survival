@@ -13,7 +13,10 @@ public static class StreetBuilder
     static readonly string[] BuildingKeys =
     {
         "art-deco-setback-tower", "brick-tenement", "corner-shop", "department-store",
-        "postwar-apartment-slab", "prewar-apartment-house", "capsule-residential-tower", "slab-apartment-block"
+        "postwar-apartment-slab", "prewar-apartment-house", "capsule-residential-tower", "slab-apartment-block",
+        // Polyfork city blocks (CC BY 4.0, see CREDITS.md)
+        "corner-tenement-92fb62", "brownstone-row-house-1b84fd", "cast-iron-loft-b04b5a", "office-tower-1538cc",
+        "parking-garage-6e4f2c", "fire-station-e2b756", "street-diner-40fc87", "one-storey-shop-row-83c958"
     };
     static readonly string[] VehicleKeys =
     {
@@ -141,6 +144,14 @@ public static class StreetBuilder
         // Shade dwellers: lurk at building bases, where it's dark
         Animals(rng, parent, "alien-hive-bug-base", 4, 1.4f, 4.5f, 12f, 18f, true, buildings);
         Animals(rng, parent, "rat-base",            6, 1.5f, 4.0f, 9f,   6f, true, buildings);
+        // Polyfork wildlife (CC BY 4.0, see CREDITS.md). Predators roam; insects lurk at the building bases.
+        Animals(rng, parent, "velociraptor-base",   2, 2.0f, 7.0f, 18f, 20f, false, buildings);
+        Animals(rng, parent, "tyrannosaurus-base",  1, 1.5f, 4.5f, 22f, 40f, false, buildings);
+        Animals(rng, parent, "lion-base",           2, 1.8f, 6.0f, 14f, 14f, false, buildings);
+        Animals(rng, parent, "ankylosaurus-base",   2, 1.2f, 3.5f, 10f, 12f, false, buildings);
+        Animals(rng, parent, "praying-mantis-base", 3, 1.5f, 4.5f, 10f, 10f, true, buildings);
+        Animals(rng, parent, "stone-centipede-base", 3, 1.4f, 4.0f, 9f, 9f, true, buildings);
+        Animals(rng, parent, "arthropleura-giant-millipede-7ade0b", 2, 1.3f, 3.5f, 9f, 8f, true, buildings);
     }
 
     static void Animals(System.Random rng, Transform parent, string key, int count, float walk, float run,

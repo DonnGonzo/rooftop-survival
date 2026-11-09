@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -26,7 +27,10 @@ public class RoofGenerator : MonoBehaviour
     {
         "roof-solar-array", "ammo-crate", "loot-crate", "loot-sack", "tool-case", "fuel-jerrycan",
         "scaffold-material-stack", "hollow-log", "boombox", "fire-hydrant", "structural-column-casing",
-        "camouflage-net-canopy", "treasure-chest"
+        "camouflage-net-canopy", "treasure-chest",
+        // Polyfork roof base modules (CC BY 4.0, see CREDITS.md)
+        "survival-roof-assembly-module-20c655", "hide-rain-catchment-funnel-e41d94", "water-tower-on-a-dbc730",
+        "portable-device-charging-dock-b175a5", "layered-leaf-sleeping-cot-7ddad4", "gravity-water-filter-stack-4a54f5"
     };
 
     void Start()
@@ -246,23 +250,48 @@ public class RoofGenerator : MonoBehaviour
         return templateMat;
     }
 
+    /// <summary>True when a shader is missing or Unity has replaced it with its magenta error shader.</summary>
+    static bool IsBroken(Shader s)
+    {
+        return s == null || !s.isSupported || s.name.IndexOf("InternalError", StringComparison.OrdinalIgnoreCase) >= 0
+            || s.name.IndexOf("Error", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    /// <summary>
+    /// Makes a fresh material from the first candidate whose shader actually works in this build.
+    /// Order: a Polyfork glTF material (proven to render here), the Resources Plain asset, then the pipeline default.
+    /// A broken candidate is skipped instead of producing magenta surfaces.
+    /// </summary>
+    static Material NewWorkingMaterial()
+    {
+        var t = GetTemplate();
+        if (t != null && !IsBroken(t.shader)) return new Material(t);
+
+        if (plainMat == null) plainMat = Resources.Load<Material>("Materials/Plain");
+        if (plainMat != null && !IsBroken(plainMat.shader)) return new Material(plainMat);
+
+        var lit = GetLitShader();
+        if (!IsBroken(lit)) return new Material(lit);
+
+        return null;
+    }
+
+    static bool warnedNoMaterial;
+
     public static void Tint(GameObject go, Color c)
     {
         var r = go.GetComponent<Renderer>();
         if (r == null) return;
 
-        // 1) A material asset shipped in Resources (always included in builds, no shader lookup at runtime)
-        if (plainMat == null) plainMat = Resources.Load<Material>("Materials/Plain");
-
-        Material m;
-        bool borrowed = false;
-        if (plainMat != null) m = new Material(plainMat);
-        else
+        Material m = NewWorkingMaterial();
+        if (m == null)
         {
-            // 2) borrow a model's material, 3) pipeline default shader
-            var t = GetTemplate();
-            borrowed = t != null;
-            m = borrowed ? new Material(t) : new Material(GetLitShader());
+            if (!warnedNoMaterial)
+            {
+                warnedNoMaterial = true;
+                Debug.LogWarning("[RoofGenerator] No working shader found. Check Graphics settings and that URP is the active pipeline.");
+            }
+            return;
         }
 
         string prop = m.HasProperty("_BaseColor") ? "_BaseColor"
@@ -270,11 +299,8 @@ public class RoofGenerator : MonoBehaviour
                     : m.HasProperty("_Color") ? "_Color" : null;
         if (prop != null) m.SetColor(prop, c);
 
-        if (borrowed)
-        {
-            if (m.HasProperty("baseColorTexture")) m.SetTexture("baseColorTexture", Texture2D.whiteTexture);
-            if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", Texture2D.whiteTexture);
-        }
+        if (m.HasProperty("baseColorTexture")) m.SetTexture("baseColorTexture", Texture2D.whiteTexture);
+        if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", Texture2D.whiteTexture);
 
         r.sharedMaterial = m;
     }

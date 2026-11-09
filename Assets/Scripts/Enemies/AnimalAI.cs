@@ -141,6 +141,10 @@ public class AnimalAI : MonoBehaviour
     {
         if (anim == clip) return;
         anim = clip;
-        if (!ModelLibrary.PlayClip(gameObject, clip) && clip == "run") ModelLibrary.PlayClip(gameObject, "walk");
+        // Clip names differ between Polyfork models (Walk / Crawl / Fly / Run), so try the close matches in order.
+        string[] fallbacks = clip == "run"
+            ? new[] { "run", "walk", "crawl", "fly", "gallop" }
+            : new[] { "walk", "crawl", "fly", "idle" };
+        ModelLibrary.PlayClip(gameObject, fallbacks);
     }
 }
