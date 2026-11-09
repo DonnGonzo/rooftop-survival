@@ -20,3 +20,9 @@
 *.aab
 sysinfo.txt
 crashlytics-build.properties
+
+# Test builds (can be hundreds of MB)
+/buildNrun/
+/[Bb]uildNrun/
+*.exe
+*.dll.meta.bak

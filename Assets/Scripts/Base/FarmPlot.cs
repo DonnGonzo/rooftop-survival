@@ -2,14 +2,16 @@ using UnityEngine;
 
 /// <summary>
 /// A planter. Plant -> water daily -> grows one stage per dawn (only if watered) -> harvest food.
-/// Call Plant/Water/Harvest from your interaction system.
+/// With the Polyfork trough model, the "planting" child node is scaled up as the crop grows.
 /// </summary>
 public class FarmPlot : MonoBehaviour
 {
     public int growDays = 3;
     public int yield = 4;
-    [Tooltip("Optional child (e.g. a GLB crop model) that scales up as it grows.")]
+    [Tooltip("Optional child (e.g. the model's 'planting' node) that scales up as it grows.")]
     public Transform cropVisual;
+
+    Vector3 baseScale = Vector3.one;
 
     public int Stage { get; private set; } = -1;   // -1 = empty
     public bool Watered { get; private set; }
@@ -17,6 +19,13 @@ public class FarmPlot : MonoBehaviour
 
     void OnEnable() { GameClock.OnDawn += HandleDawn; UpdateVisual(); }
     void OnDisable() { GameClock.OnDawn -= HandleDawn; }
+
+    public void SetCropVisual(Transform t)
+    {
+        cropVisual = t;
+        baseScale = t != null ? t.localScale : Vector3.one;
+        UpdateVisual();
+    }
 
     void HandleDawn(int day)
     {
@@ -51,11 +60,11 @@ public class FarmPlot : MonoBehaviour
         return yield;
     }
 
-    void UpdateVisual()
+    public void UpdateVisual()
     {
         if (cropVisual == null) return;
         cropVisual.localScale = Stage < 0
             ? Vector3.zero
-            : Vector3.one * Mathf.Lerp(0.25f, 1f, Mathf.Clamp01(Stage / (float)growDays));
+            : baseScale * Mathf.Lerp(0.25f, 1f, Mathf.Clamp01(Stage / (float)growDays));
     }
 }
