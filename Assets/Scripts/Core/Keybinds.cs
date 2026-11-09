@@ -51,7 +51,7 @@ public static class Keybinds
         for (int i = 0; i < Defaults.Length; i++)
         {
             string saved = PlayerPrefs.GetString(PrefKey(i), "");
-            KeyCode k;
+            KeyCode k = KeyCode.None;
             bool ok = saved.Length > 0 && Enum.TryParse(saved, out k) && Supported(k);
             binds[i] = ok ? k : Defaults[i];
         }
