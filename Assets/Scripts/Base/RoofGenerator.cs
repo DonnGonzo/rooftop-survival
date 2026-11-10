@@ -26,14 +26,21 @@ public class RoofGenerator : MonoBehaviour
     public Vector2 widthRange = new Vector2(15f, 27f);
     public Vector2 depthRange = new Vector2(15f, 27f);
 
-    static readonly string[] JunkKeys = { "roof-solar-array", "scaffold-material-stack", "structural-column-casing", "fuel-jerrycan" };
+    static readonly string[] JunkKeys = { "roof-solar-array", "scaffold-material-stack", "fuel-jerrycan", "tyre-stack" };
 
-    struct Cache { public string model, item; public int min, max; public Cache(string m, string i, int a, int b) { model = m; item = i; min = a; max = b; } }
+    struct Cache
+    {
+        public string model, label, item, extra; public float size; public int min, max;
+        public Cache(string model, string label, float size, string item, int min, int max, string extra)
+        { this.model = model; this.label = label; this.size = size; this.item = item; this.min = min; this.max = max; this.extra = extra; }
+    }
     static readonly Cache[] Caches =
     {
-        new Cache("loot-crate", "wood", 2, 4), new Cache("tool-case", "scrap", 2, 3),
-        new Cache("loot-sack", "cloth", 2, 3), new Cache("ammo-crate", "scrap", 1, 3),
-        new Cache("loot-sack", "food", 1, 3), new Cache("bottle", "water", 1, 2),
+        new Cache("wooden-crate", "crate", 0.8f, "wood", 2, 4, "fiber"),
+        new Cache("tool-case", "tool case", 0.55f, "scrap", 1, 3, "stone"),
+        new Cache("supply-crate", "supply crate", 0.8f, "food", 1, 3, "water"),
+        new Cache("salvage-crate", "salvage crate", 0.8f, "stone", 2, 4, "scrap"),
+        new Cache("adventurer-s-backpack", "backpack", 0.5f, "cloth", 1, 3, "food"),
     };
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -59,8 +66,8 @@ public class RoofGenerator : MonoBehaviour
         run.roofQuality = q;
         run.food = Mathf.RoundToInt(Mathf.Lerp(3f, 8f, q));
         run.water = Mathf.RoundToInt(Mathf.Lerp(3f, 8f, q));
-        run.wood = Mathf.RoundToInt(Mathf.Lerp(3f, 8f, q));
-        run.scrap = Mathf.RoundToInt(Mathf.Lerp(1f, 5f, q));
+        run.wood = Mathf.RoundToInt(Mathf.Lerp(2f, 6f, q));
+        run.scrap = Mathf.RoundToInt(Mathf.Lerp(0f, 3f, q));
         run.items.Add(new ItemStack { id = "planter_kit", count = 1 });   // one planter to get the farm started
     }
 
@@ -109,18 +116,20 @@ public class RoofGenerator : MonoBehaviour
         BuildWaterTower(run, w, d, used);
         BuildStairHut(w, d, used);
 
-        // A few supply caches. Each can be taken once per run.
+        // A few supply crates left by whoever held this roof before. Each is searched once per run.
         int caches = 3 + Mathf.RoundToInt(q * 2f);
         for (int i = 0; i < caches; i++)
         {
             var c = Caches[rng.Next(Caches.Length)];
-            int n = rng.Next(c.min, c.max + 1);
             Vector3 at;
             if (!FindSpot(0.7f, rng, w, d, used, 1.6f, out at)) continue;
-            if (run.looted.Contains(i)) continue;
-            var pk = Pickup.Create(c.model, c.item, n, roofRoot, at, 0.8f);
+            var go = ModelLibrary.Spawn(c.model, roofRoot, at, (float)rng.NextDouble() * 360f, fitFootprint: c.size, addCollider: true, keepAnimations: false);
+            if (go == null) continue;
+            go.name = "RoofCache";
+            var box = Container.Add(go, "Search " + c.label, 1.4f, 0, new LootRoll(c.item, c.min, c.max), new LootRoll(c.extra, 1, 2, 0.5f));
             int index = i;
-            pk.onTaken = () => { run.looted.Add(index); };
+            if (run.looted.Contains(index)) box.SetEmpty();
+            box.onEmptied = () => { run.looted.Add(index); };
         }
 
         // Rooftop junk along the edges: scenery only.
@@ -179,7 +188,7 @@ public class RoofGenerator : MonoBehaviour
         Look.Paint(rope, "plain", new Color(0.72f, 0.6f, 0.38f));
     }
 
-    /// <summary>Campfire, cot and workbench in the south-west corner.</summary>
+    /// <summary>Campfire and cot in the south-west corner. The workbench is yours to build.</summary>
     void BuildCamp(RunData run, float w, float d, List<Vector3> used)
     {
         float fx = -w / 2f + 3.4f, fz = -d / 2f + 3.4f;
@@ -193,7 +202,7 @@ public class RoofGenerator : MonoBehaviour
 
         // Cot: sleep through the night.
         Vector3 cotPos = new Vector3(fx + 2.6f, 0f, fz - 1.2f);
-        var cot = ModelLibrary.Spawn("layered-leaf-sleeping-cot", roofRoot, cotPos, 90f, fitFootprint: 2.1f, addCollider: false, keepAnimations: false);
+        var cot = ModelLibrary.Spawn("sleeping-bag", roofRoot, cotPos, 90f, fitFootprint: 2.0f, addCollider: false, keepAnimations: false);
         if (cot == null)
         {
             cot = Look.Box("Cot", roofRoot, cotPos + new Vector3(0f, 0.2f, 0f), new Vector3(2f, 0.4f, 0.9f), Look.Mat("planks", new Color(0.5f, 0.4f, 0.3f), 1f), false);
@@ -211,16 +220,6 @@ public class RoofGenerator : MonoBehaviour
             Tutorial.Notify("sleep");
         });
         used.Add(new Vector3(cotPos.x, cotPos.z, 1.4f));
-
-        // Workbench against the west parapet.
-        Vector3 benchPos = new Vector3(-w / 2f + 1.3f, 0f, fz + 3.2f);
-        var bench = ModelLibrary.Spawn("upgradeable-assembly-workbench", roofRoot, benchPos, 90f, fitFootprint: 2.2f, addCollider: true, keepAnimations: false);
-        if (bench == null)
-            bench = Look.Box("Workbench", roofRoot, benchPos + new Vector3(0f, 0.45f, 0f), new Vector3(0.9f, 0.9f, 2f), Look.Mat("planks", new Color(0.55f, 0.42f, 0.28f), 1f));
-        bench.name = "Workbench";
-        Workbench.Spot = bench.transform;
-        ActionSpot.Add(bench, 3f, () => "Use workbench (crafting)", () => { GameState.UiOpen = true; });
-        used.Add(new Vector3(benchPos.x, benchPos.z, 1.6f));
     }
 
     /// <summary>Water tower in the south-east corner. It refills once a day.</summary>

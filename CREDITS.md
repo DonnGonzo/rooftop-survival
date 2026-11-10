@@ -46,3 +46,14 @@ Fire and light: flame-brazier-bbf74a, wall-torch-sconce-6ddb52, standing-brazier
 Wildlife: velociraptor-base, arthropleura-giant-millipede-7ade0b, stone-centipede-base,
 praying-mantis-base, pteranodon-base, tyrannosaurus-base, lion-base, ankylosaurus-base,
 rabbit-base, forest-deer-fe648d
+
+
+## Added 9 November 2026 (forest, interiors, tools, creatures)
+
+Also from Polyfork (https://polyfork.dev), CC BY 4.0:
+
+tall pine tree, young pine, oak tree, broadleaf oak, birch tree, maple tree, front yard fir tree, leafy bush, round bush, bush, berry bush, fern plant, fern clump, mushroom cluster, grass tuft, wildflower plant, cattail reed, river reed cluster, medium rock, large boulder, rock outcrop, fern covered boulder, boulder field cluster, iron ore deposit, harvestable flint seam, tree stump, moss covered stump, bracket fungus log, driftwood log, smuggler cave mouth, dinosaur nest, brood nest, ant nest entrance mound, bone scatter, skull and bone scatter, bone warning totem, log cabin, porch log cabin, camp tent, canvas ridge tent, stone ring campfire, split rail fence run, stone well, log store, heavy timber picnic table, lake dock run, wire shelving rack, supply shelving rack, bookshelf, sofa, fridge freezer, glass door drinks fridge, filing cabinet, base cabinet run, medicine cabinet, locker bank, wardrobe, hotel king bed, bedside locker, reception desk, sit stand desk, task chair, table lamp, diner counter run, counter stool, vending machine, kitchen sink, wooden crate, supply crate, salvage crate, wooden barrel, area rug, flat screen television, microwave oven, toilet, metal trash can, abandoned shopping trolley, tyre stack, first aid bag, wall first aid box, adventurer s backpack, camp water jug, field workbench, smelting furnace, blacksmith forge, anvil, campfire cook tripod, mining pickaxe, hand axe, arrow, sleeping bag, camping lantern, arc street lamp, construction dumpster, hanging vine run, wall vine curtain, flesh eater, undead pirate, ashen assassin, garden orb weaver, tarantula, crocodile, owl, frog, pig, deer, sheep, compsognathus, bear, fox, dog.
+
+## Made for this game
+
+The `rs-*` models (spike trap, snare, nail club, rope anchor, stair hut, doorway, barricade, medkit) were built for this project with `Tools/make_props.py` (Blender). No third-party content.

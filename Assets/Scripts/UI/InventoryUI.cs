@@ -1,6 +1,10 @@
 using UnityEngine;
 
-/// <summary>The inventory and crafting panel (Inventory key, or the workbench). Time stops while it is open.</summary>
+/// <summary>
+/// The inventory and crafting panel. Opened with the Inventory key it lists what you carry and the recipes
+/// made by hand. Opened from a workbench or forge it lists that station's recipes: choosing one places an
+/// order, which you then build by holding Interact at the station. Time stops while the panel is open.
+/// </summary>
 public class InventoryUI : MonoBehaviour
 {
     GUIStyle head, body, dim, btn;
@@ -9,7 +13,12 @@ public class InventoryUI : MonoBehaviour
     void Update()
     {
         if (!GameState.Playing || GameState.MenuOpen) return;
-        if (Inp.Inventory()) GameState.UiOpen = !GameState.UiOpen;
+        if (Inp.Inventory())
+        {
+            GameState.UiOpen = !GameState.UiOpen;
+            CraftStation.Open = null;
+        }
+        if (!GameState.UiOpen) CraftStation.Open = null;
     }
 
     void OnGUI()
@@ -30,23 +39,26 @@ public class InventoryUI : MonoBehaviour
         GUI.color = new Color(0f, 0f, 0f, 0.55f);
         GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Texture2D.whiteTexture);
 
-        float w = Mathf.Min(860f, Screen.width - 40f), h = Mathf.Min(560f, Screen.height - 40f);
+        float w = Mathf.Min(900f, Screen.width - 40f), h = Mathf.Min(580f, Screen.height - 40f);
         var r = new Rect((Screen.width - w) / 2f, (Screen.height - h) / 2f, w, h);
         GUI.color = new Color(0.07f, 0.08f, 0.09f, 0.96f);
         GUI.DrawTexture(r, Texture2D.whiteTexture);
         GUI.color = Color.white;
 
+        var station = CraftStation.Open;
+        string kind = station != null ? station.kind : "";
+
         GUILayout.BeginArea(new Rect(r.x + 18, r.y + 14, w - 36, h - 28));
         GUILayout.BeginHorizontal();
-        GUILayout.Label("INVENTORY AND CRAFTING", head);
+        GUILayout.Label(station != null ? station.Label.ToUpper() : "INVENTORY", head);
         GUILayout.FlexibleSpace();
-        GUILayout.Label(Keybinds.Describe(GameAction.Inventory) + " to close", dim);
+        GUILayout.Label("Level " + Progress.Level + "     " + Keybinds.Describe(GameAction.Inventory) + " to close", dim);
         GUILayout.EndHorizontal();
         GUILayout.Space(6);
         GUILayout.BeginHorizontal();
 
         // ---- what you carry
-        GUILayout.BeginVertical(GUILayout.Width(w * 0.44f));
+        GUILayout.BeginVertical(GUILayout.Width(w * 0.42f));
         GUILayout.Label("Carrying", head);
         scrollLeft = GUILayout.BeginScrollView(scrollLeft);
         var run = RunManager.Instance != null ? RunManager.Instance.Current : null;
@@ -56,14 +68,11 @@ public class InventoryUI : MonoBehaviour
             if (n <= 0) continue;
             var wp = Items.Weapon(d.id);
             GUILayout.BeginHorizontal();
-            GUILayout.Label(d.name + "  x" + n, body, GUILayout.Width(150));
+            GUILayout.Label(d.name + "  x" + n, body, GUILayout.Width(170));
             if (wp != null && run != null)
             {
                 bool on = run.equipped == d.id;
-                if (GUILayout.Button(on ? "In hand" : "Equip", GUILayout.Width(80)) && !on)
-                {
-                    Items.Equip(d.id);
-                }
+                if (GUILayout.Button(on ? "In hand" : "Equip", GUILayout.Width(80)) && !on) Items.Equip(d.id);
             }
             GUILayout.EndHorizontal();
             GUILayout.Label(wp != null ? d.desc + "  Damage " + wp.damage.ToString("F0") + ", reach " + wp.reach.ToString("0.0") + " m." : d.desc, dim);
@@ -76,23 +85,39 @@ public class InventoryUI : MonoBehaviour
 
         // ---- recipes
         GUILayout.BeginVertical();
-        GUILayout.BeginHorizontal();
-        GUILayout.Label("Crafting", head);
-        GUILayout.FlexibleSpace();
-        GUI.color = Workbench.PlayerNear ? new Color(0.6f, 0.95f, 0.6f) : new Color(1f, 0.75f, 0.5f);
-        GUILayout.Label(Workbench.PlayerNear ? "At the workbench" : "Not at the workbench", body);
-        GUI.color = Color.white;
-        GUILayout.EndHorizontal();
+        GUILayout.Label(station != null ? "Build here" : "Make by hand", head);
+        if (station != null && station.Busy)
+            GUILayout.Label("An order is under way. Close this and hold " + Keybinds.Describe(GameAction.Interact) + " at the " + station.Label.ToLower() + " to finish it.", body);
+        if (station == null)
+            GUILayout.Label("Tools, weapons and traps are built at a workbench on your roof.", dim);
+
         scrollRight = GUILayout.BeginScrollView(scrollRight);
         foreach (var rc in Items.Recipes)
         {
-            bool has = Items.HasInputs(rc);
-            bool benchOk = !rc.needsBench || Workbench.PlayerNear;
-            GUI.enabled = has && benchOk;
-            string label = Items.Def(rc.output).name + (rc.count > 1 ? " x" + rc.count : "") + "\n" + rc.Describe()
-                         + (rc.needsBench ? (benchOk ? "   (workbench)" : "   NEEDS THE WORKBENCH") : "");
-            if (GUILayout.Button(label, btn, GUILayout.Height(46))) Items.Craft(rc);
+            if (rc.station != kind) continue;
+            bool unlocked = Items.Unlocked(rc);
+            bool can = unlocked && Items.HasInputs(rc) && (station == null || !station.Busy);
+            GUI.enabled = can;
+            string label = Items.Name(rc.output) + (rc.count > 1 ? " x" + rc.count : "") + "\n"
+                         + (unlocked ? rc.Describe() + (rc.workSeconds > 0f ? "     " + rc.workSeconds.ToString("F0") + " s of work" : "")
+                                     : "Unlocks at level " + rc.level);
+            if (GUILayout.Button(label, btn, GUILayout.Height(46)))
+            {
+                if (station == null) Items.CraftByHand(rc);
+                else if (station.PlaceOrder(rc)) { GameState.UiOpen = false; CraftStation.Open = null; }
+            }
             GUI.enabled = true;
+        }
+
+        // What the other stations offer, so the player can see what is ahead.
+        foreach (string other in new[] { "", "workbench", "forge" })
+        {
+            if (other == kind) continue;
+            GUILayout.Space(8);
+            GUILayout.Label(other == "" ? "By hand (from the inventory)" : other == "workbench" ? "At a workbench" : "At a forge", dim);
+            foreach (var rc in Items.Recipes)
+                if (rc.station == other)
+                    GUILayout.Label("   " + Items.Name(rc.output) + "  -  " + rc.Describe() + (Items.Unlocked(rc) ? "" : "   (level " + rc.level + ")"), dim);
         }
         GUILayout.EndScrollView();
         GUILayout.EndVertical();

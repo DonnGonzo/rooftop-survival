@@ -66,6 +66,144 @@ public static class Diag
         return sb.ToString();
     }
 
+    public static string Linear()
+    {
+        UnityEditor.PlayerSettings.colorSpace = ColorSpace.Linear;
+        return "colorSpace=" + UnityEditor.PlayerSettings.colorSpace;
+    }
+
+    public static string Raid(string a) { NightDirector.Instance.StartRaid(GameClock.Instance.Day, F(a)); return "raid started"; }
+    public static string Xp(string a) { Progress.Gain((int)F(a)); return "level " + Progress.Level; }
+    public static string Day(string a) { typeof(GameClock).GetProperty("Day").SetValue(GameClock.Instance, (int)F(a)); return "day " + GameClock.Instance.Day; }
+    public static string NewRun() { RunManager.Instance.StartNewRun(); GameState.AutoStart = true; UnityEngine.SceneManagement.SceneManager.LoadScene(0); return "new run"; }
+
+    /// <summary>Counts of what exists, and the dens.</summary>
+    public static string World()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(StreetBuilder.Diag + " animals=" + AnimalAI.All.Count + " nodes=" + Object.FindObjectsByType<ResourceNode>().Length
+            + " containers=" + Object.FindObjectsByType<Container>().Length + " renderers=" + Object.FindObjectsByType<Renderer>().Length
+            + " fps=" + (1f / Time.smoothDeltaTime).ToString("F0"));
+        foreach (var d in SpawnDirector.Dens) sb.AppendLine(d.label + " " + d.pos.ToString("F0") + " live=" + d.live.Count + (d.nightOnly ? " night" : ""));
+        return sb.ToString();
+    }
+
+    /// <summary>World positions of the first few objects whose name starts with the text.</summary>
+    public static string Find(string prefix)
+    {
+        var sb = new StringBuilder();
+        int n = 0;
+        foreach (var t in Object.FindObjectsByType<Transform>())
+        {
+            if (!t.name.StartsWith(prefix.Trim())) continue;
+            sb.AppendLine(t.name + " " + t.position.ToString("F1") + " rotY=" + t.eulerAngles.y.ToString("F0"));
+            if (++n >= 12) break;
+        }
+        return sb.ToString();
+    }
+
+    public static string Hold(string a) { Inp.HoldOverride = a.Trim() == "1"; return "hold " + Inp.HoldOverride; }
+    public static string Place(string kit)
+    {
+        var pc = PlayerController.Instance.transform;
+        Items.Add(kit.Trim(), 1);
+        bool ok = Buildables.Place(kit.Trim(), new Vector3(pc.position.x, 0f, pc.position.z) + pc.forward * 2.4f, pc.eulerAngles.y);
+        if (ok) Items.Remove(kit.Trim(), 1);
+        return "placed " + ok;
+    }
+    public static string Equip(string id) { id = id.Trim(); if (id == "none") { Items.Equip(""); return "fists"; } Items.Add(id, 1); Items.Equip(id); return "equipped " + id; }
+    public static string Inv()
+    {
+        var sb = new StringBuilder();
+        foreach (var d in Items.Defs) { int n = Items.Count(d.id); if (n > 0) sb.Append(d.id + "=" + n + " "); }
+        var pc = PlayerController.Instance;
+        return sb + "| lvl " + Progress.Level + " xp " + Progress.Xp + " hp " + pc.health.ToString("F0") + " prompt='" + pc.Prompt + "' rope='" + pc.RopePrompt + "' hold=" + pc.HoldProgress.ToString("F2")
+             + " day " + GameClock.Instance.Day + " h " + GameClock.Instance.Hour.ToString("F1") + " raid=" + NightDirector.RaidActive + ":" + NightDirector.RaidersLeft + " def=" + BaseStructure.TotalDefense();
+    }
+    public static string Order(string id)
+    {
+        var st = Object.FindAnyObjectByType<CraftStation>();
+        if (st == null) return "no station";
+        foreach (var r in Items.Recipes) if (r.output == id.Trim()) return "order " + st.PlaceOrder(r);
+        return "no recipe";
+    }
+    public static string Map() { MapView.Toggle(); return "map " + MapView.Showing; }
+    public static string SleepNow() { GameClock.Sleep(); return "sleeping"; }
+    /// <summary>Moves the player next to the nearest object of a kind: tree, rock, wreck, container, animal.</summary>
+    public static string Near(string what)
+    {
+        var pc = PlayerController.Instance;
+        Transform best = null; float bd = 1e9f;
+        System.Action<Transform> consider = t => { float d = (t.position - pc.transform.position).sqrMagnitude; if (d < bd) { bd = d; best = t; } };
+        what = what.Trim();
+        if (what == "container") { foreach (var c in Object.FindObjectsByType<Container>()) if (!c.Empty && c.transform.position.y < -50f) consider(c.transform); }
+        else if (what == "animal") { foreach (var a in AnimalAI.All) consider(a.transform); }
+        else foreach (var n in Object.FindObjectsByType<ResourceNode>())
+            if (!n.Spent && n.kind.ToString().ToLower() == what) consider(n.transform);
+        if (best == null) return "none";
+        Vector3 dir = (pc.transform.position - best.position); dir.y = 0f; dir = dir.sqrMagnitude < 0.01f ? Vector3.forward : dir.normalized;
+        Tele((best.position.x + dir.x * 1.6f).ToString(CultureInfo.InvariantCulture) + "," + (best.position.y + 0.4f).ToString(CultureInfo.InvariantCulture) + "," + (best.position.z + dir.z * 1.6f).ToString(CultureInfo.InvariantCulture));
+        pc.transform.rotation = Quaternion.LookRotation(-dir);
+        return "near " + best.name + " " + best.position.ToString("F0");
+    }
+
+    /// <summary>Native size of models (comma separated keys).</summary>
+    public static string Bounds(string keys)
+    {
+        var sb = new StringBuilder();
+        foreach (var k in keys.Split(','))
+        {
+            var go = ModelLibrary.Spawn(k.Trim(), null, new Vector3(0, 900, 0), 0f, keepAnimations: false);
+            if (go == null) { sb.AppendLine(k + " missing"); continue; }
+            var b = ModelLibrary.LocalBounds(go.transform);
+            sb.AppendLine(k.Trim() + " size=" + b.size.ToString("F2") + " centre=" + b.center.ToString("F2"));
+            Object.DestroyImmediate(go);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>"file,key[,height]": a studio picture of one model.</summary>
+    public static string Preview(string a)
+    {
+        var p = a.Split(',');
+        var go = ModelLibrary.Spawn(p[1].Trim(), null, new Vector3(0, 900, 0), 0f, fitHeight: p.Length > 2 ? F(p[2]) : 0f, keepAnimations: false);
+        if (go == null) return "missing";
+        var b = ModelLibrary.LocalBounds(go.transform);
+        float s = go.transform.localScale.x;
+        float r = Mathf.Max(b.size.x, b.size.y, b.size.z) * s;
+        var cg = new GameObject("DiagCam");
+        var cam = cg.AddComponent<Camera>();
+        Vector3 c = go.transform.position + Vector3.up * b.size.y * s * 0.5f;
+        cam.transform.position = c + new Vector3(r * 0.9f, r * 0.6f, r * 1.3f);
+        cam.transform.LookAt(c);
+        cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = new Color(0.5f, 0.55f, 0.6f);
+        cam.nearClipPlane = 0.01f; cam.fieldOfView = 40f;
+        string res = Render(cam, p[0].Trim());
+        Object.DestroyImmediate(cg); Object.DestroyImmediate(go);
+        return res + " size=" + (b.size * s).ToString("F2");
+    }
+
+    public static string Hands()
+    {
+        var body = Object.FindAnyObjectByType<PlayerBody>();
+        var sb = new StringBuilder();
+        foreach (string f in new[] { "rightHand", "leftHand" })
+        {
+            object h = typeof(PlayerBody).GetField(f, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(body);
+            var t = h.GetType();
+            Vector3 fd = (Vector3)t.GetMethod("FingerDir").Invoke(h, null), pd = (Vector3)t.GetMethod("PalmDir").Invoke(h, null);
+            var hand = (Transform)t.GetField("hand").GetValue(h);
+            var fingers = (System.Collections.Generic.List<Transform>)t.GetField("fingers").GetValue(h);
+            var thumb = (System.Collections.Generic.List<Transform>)t.GetField("thumb").GetValue(h);
+            sb.AppendLine(f + " finger=" + body.transform.InverseTransformDirection(fd).ToString("F2") + " palm=" + body.transform.InverseTransformDirection(pd).ToString("F2")
+                + " forearm=" + body.transform.InverseTransformDirection((hand.position - hand.parent.position).normalized).ToString("F2") + " fingers=" + fingers.Count + " thumb=" + thumb.Count
+                + " first=" + (fingers.Count > 0 ? fingers[0].name + "/" + fingers[1].name + "/" + fingers[2].name + "/" + fingers[3].name : ""));
+        }
+        return sb.ToString();
+    }
+
+    public static string Character(string i) { GameSettings.CharacterIndex = (int)F(i); return Characters.Current.name; }
+
     public static string Pending() { return steps.Count.ToString(); }
 
     public static string Start()
@@ -179,8 +317,8 @@ public static class Diag
     public static string Animals()
     {
         var sb = new StringBuilder();
-        foreach (var a in Object.FindObjectsByType<AnimalAI>())
-            sb.AppendLine(a.name + " " + a.transform.position.ToString("F0") + " scale=" + a.transform.localScale.x.ToString("F2"));
+        foreach (var a in AnimalAI.All)
+            sb.AppendLine(a.name + " " + a.mode + " " + a.transform.position.ToString("F0"));
         return sb.ToString();
     }
 

@@ -13,6 +13,8 @@ public class PlacedStructure
     public float health;
     public int stage = -1;    // planters: crop stage (-1 = empty)
     public bool watered;      // planters: watered today
+    public string order = ""; // stations: what is being built
+    public float orderDone;   // stations: seconds of work done on it
 }
 
 [Serializable]
@@ -24,6 +26,7 @@ public class RunData
     public int food, water, wood, scrap;
     public float roofQuality;               // 0 (terrible) .. 1 (great)
     public string equipped = "";            // weapon in hand ("" = fists)
+    public int xp;                          // experience; the level is worked out from it
     public int waterDay;                    // last day the water tower was emptied
     public bool hungry;                     // missed food or water at the last dawn
     public List<int> looted = new List<int>();   // roof supply caches already taken
@@ -67,25 +70,27 @@ public class RunManager : MonoBehaviour
     {
         Current = new RunData { seed = Guid.NewGuid().GetHashCode() };
         RoofGenerator.ApplyStartingResources(Current);
-        Save();
+        Save(false);
     }
 
-    public void Save()
+    /// <summary>keepWorld = false writes a brand-new run without copying the clock or the structures of the old one.</summary>
+    public void Save(bool keepWorld = true)
     {
         if (Current == null) return;
-        if (GameClock.Instance != null)
+        if (keepWorld && GameClock.Instance != null)
         {
             Current.day = GameClock.Instance.Day;
             Current.hour = GameClock.Instance.Hour;
         }
         // Structures exist only once the roof has been built; before that, keep what the file had.
-        if (RoofGenerator.Built)
+        if (keepWorld && RoofGenerator.Built)
         {
             Current.structures.Clear();
             foreach (var s in BaseStructure.All)
             {
                 if (s == null || (s.hp != null && s.hp.Dead)) continue;
                 var plot = s.GetComponent<FarmPlot>();
+                var station = s.GetComponent<CraftStation>();
                 Current.structures.Add(new PlacedStructure
                 {
                     id = s.id,
@@ -93,7 +98,9 @@ public class RunManager : MonoBehaviour
                     yRot = s.transform.eulerAngles.y,
                     health = s.hp != null ? s.hp.current : 0f,
                     stage = plot != null ? plot.Stage : -1,
-                    watered = plot != null && plot.Watered
+                    watered = plot != null && plot.Watered,
+                    order = station != null ? station.orderId : "",
+                    orderDone = station != null ? station.done : 0f
                 });
             }
         }

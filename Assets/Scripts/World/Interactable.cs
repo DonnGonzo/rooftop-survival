@@ -14,7 +14,16 @@ public abstract class Interactable : MonoBehaviour
 
     /// <summary>Short text for the HUD, for example "Take 3 Scrap". Empty hides the prompt.</summary>
     public abstract string Prompt { get; }
+    /// <summary>Tap action. For hold actions (see HoldSeconds) this is called once, when the hold completes.</summary>
     public abstract void Use();
+
+    /// <summary>More than 0 means the key must be held this long (searching a cabinet, picking berries).</summary>
+    public virtual float HoldSeconds => 0f;
+    /// <summary>Stations override this to take work every frame the key is held, instead of a fixed hold time.</summary>
+    public virtual bool TakesWork => false;
+    public virtual void Work(float seconds) { }
+    /// <summary>0..1 shown on the HUD bar for TakesWork interactables.</summary>
+    public virtual float WorkProgress => 0f;
 
     /// <summary>Where the range is measured from. Long objects can override this.</summary>
     public virtual Vector3 Point => transform.position;

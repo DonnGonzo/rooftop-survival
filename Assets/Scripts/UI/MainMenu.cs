@@ -39,7 +39,7 @@ public class MainMenu : MonoBehaviour
 
         w = 480f;
         x = (Screen.width - w) / 2f;
-        y = Screen.height * 0.12f;
+        y = Mathf.Max(10f, Screen.height * 0.06f);
 
         GUI.Label(new Rect(x, y, w, 60), "ROOFTOP SURVIVAL", title);
         y += 64;
@@ -156,9 +156,9 @@ public class MainMenu : MonoBehaviour
         for (int i = 0; i < Keybinds.Count; i++)
         {
             string shown = capturing == i ? "press a key..." : Keybinds.Describe((GameAction)i);
-            if (GUI.Button(new Rect(x, y, w, 30), Keybinds.Labels[i] + "   [" + shown + "]", button))
+            if (GUI.Button(new Rect(x, y, w, 26), Keybinds.Labels[i] + "   [" + shown + "]", button))
                 capturing = i;
-            y += 34;
+            y += 28;
         }
         y += 8;
         if (Btn("Reset controls to defaults"))
@@ -176,16 +176,18 @@ public class MainMenu : MonoBehaviour
     void DrawHelp()
     {
         string K(GameAction a) => Keybinds.Describe(a);
-        Label(K(GameAction.Forward) + K(GameAction.Left) + K(GameAction.Back) + K(GameAction.Right) +
-              " move, " + K(GameAction.Sprint) + " sprint, " + K(GameAction.Jump) + " jump, mouse look.", 24);
-        Label(K(GameAction.Interact) + ": pick up, plant, water or harvest.   " + K(GameAction.Build) +
-              ": place a spike trap (trap kit).", 24);
-        Label(K(GameAction.Grapple) + ": rappel down at the roof edge, or climb back up at the base.", 24);
-        Label(K(GameAction.Inventory) + ": inventory and crafting.   " + K(GameAction.Use) + ": use a bandage or food.", 24);
-        Label(K(GameAction.Attack) + ": attack. Keep clicking quickly to chain a combo.   " + K(GameAction.Heavy) +
-              ": heavy swing.   " + K(GameAction.ToggleView) + ": third-person view.", 40);
-        Label("Be back on the roof before dusk. Nights 1-10 are safe. Night 11 is when attacks begin.", 40);
-        Label(K(GameAction.Pause) + ": pause menu. Keys can be changed in Settings > Controls.", 24);
+        Label("You hold a rooftop above a ruined city ringed by forest. Days are for gathering; be home by dark.", 40);
+        Label(K(GameAction.Interact) + ": use what is in front of you. HOLD it to search cupboards and crates, pick bushes, and build at a workbench.", 40);
+        Label(K(GameAction.Attack) + " / " + K(GameAction.Heavy) + ": strike. Hit trees for Wood, rock for Stone, wrecks and ore for Scrap. "
+              + K(GameAction.SwapWeapon) + " switches weapon.", 40);
+        Label(K(GameAction.Inventory) + ": inventory and hand recipes. Tools, traps and weapons are ordered at a workbench, then built by holding "
+              + K(GameAction.Interact) + " there. New recipes unlock as you level up.", 56);
+        Label(K(GameAction.Build) + ": place the selected kit on the roof. " + K(GameAction.CycleBuild) + ": next kit. "
+              + K(GameAction.Grapple) + ": use the rope at the yellow anchor. " + K(GameAction.Map) + ": map.", 40);
+        Label("Each dawn you eat 1 Food and drink 1 Water. Animals come from dens and grow in number and kind every day. "
+              + "From night 11, raids climb your building: traps, barricades and your own hands decide it.", 56);
+        Label(K(GameAction.Use) + ": bandage or eat. " + K(GameAction.ToggleView) + ": third person. " + K(GameAction.Pause)
+              + ": menu. Keys can be changed in Settings > Controls.", 40);
         if (Btn("Back")) page = Page.Main;
     }
 

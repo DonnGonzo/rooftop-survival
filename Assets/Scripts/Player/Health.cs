@@ -85,7 +85,7 @@ public class Health : MonoBehaviour
             return;
         }
         if (dropCount > 0 && !string.IsNullOrEmpty(dropItem))
-            Pickup.Create("loot-sack", dropItem, dropCount, null, transform.position + Vector3.up * 0.2f);
+            Pickup.Create("loot-sack", dropItem, dropCount, null, transform.position + Vector3.up * 0.05f, 0.5f);
         StartCoroutine(FallOver());
     }
 

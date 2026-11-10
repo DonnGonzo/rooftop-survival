@@ -12,6 +12,8 @@ public static class Buildables
         switch (kit)
         {
             case "planter_kit": return "planter";
+            case "workbench_kit": return "workbench";
+            case "forge_kit": return "forge";
             case "snare_kit": return "snare";
             case "trap_kit": return "spike_trap";
             case "barricade_kit": return "barricade";
@@ -29,6 +31,23 @@ public static class Buildables
             case "planter":
                 go = RoofGenerator.SpawnPlanterAt(pos, yaw);
                 durability = 40f; defense = 0f;
+                break;
+
+            case "workbench":
+                go = ModelLibrary.Spawn("field-workbench", null, pos, yaw, fitFootprint: 2.0f, addCollider: true, keepAnimations: false)
+                     ?? ModelLibrary.Spawn("upgradeable-assembly-workbench", null, pos, yaw, fitFootprint: 2.0f, addCollider: true, keepAnimations: false)
+                     ?? Placeholder(pos, yaw, new Vector3(2f, 0.9f, 0.9f), new Color(0.55f, 0.42f, 0.28f));
+                durability = 80f; defense = 0f;
+                go.AddComponent<CraftStation>().kind = "workbench";
+                break;
+
+            case "forge":
+                go = ModelLibrary.Spawn("blacksmith-forge", null, pos, yaw, fitFootprint: 2.2f, addCollider: true, keepAnimations: false)
+                     ?? ModelLibrary.Spawn("smelting-furnace", null, pos, yaw, fitFootprint: 2.0f, addCollider: true, keepAnimations: false)
+                     ?? Placeholder(pos, yaw, new Vector3(1.6f, 1.4f, 1.6f), new Color(0.4f, 0.4f, 0.42f));
+                durability = 120f; defense = 0f;
+                go.AddComponent<CraftStation>().kind = "forge";
+                go.AddComponent<FireFlicker>().baseIntensity = 1.0f;
                 break;
 
             case "snare":
@@ -78,6 +97,8 @@ public static class Buildables
         switch (id)
         {
             case "planter": return "Planter";
+            case "workbench": return "Workbench";
+            case "forge": return "Forge";
             case "snare": return "Snare";
             case "spike_trap": return "Spike trap";
             case "barricade": return "Barricade";
@@ -92,7 +113,8 @@ public static class Buildables
         if (id == null) return false;
         var s = Spawn(id, pos, yaw);
         if (s == null) return false;
-        Tutorial.Notify(id == "planter" ? "planter" : "trap");
+        Tutorial.Notify(id == "planter" ? "planter" : id == "workbench" ? "bench" : "trap");
+        Progress.Gain(6);
         Hud.Toast(Label(id) + " placed" + (s.defense > 0f ? " (+" + s.defense.ToString("F0") + " defense)." : "."));
         if (RunManager.Instance != null) RunManager.Instance.Save();
         return true;
@@ -109,6 +131,8 @@ public static class Buildables
             if (saved.health > 0f && s.hp != null) s.hp.current = Mathf.Min(s.hp.max, saved.health);
             var plot = s.GetComponent<FarmPlot>();
             if (plot != null) plot.SetState(saved.stage, saved.watered);
+            var station = s.GetComponent<CraftStation>();
+            if (station != null) { station.orderId = saved.order ?? ""; station.done = saved.orderDone; }
         }
     }
 

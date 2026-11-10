@@ -30,34 +30,46 @@ public class Species
 
 public static class Wildlife
 {
-    public static readonly Species[] Predators =
+    static readonly Species[] All =
     {
-        new Species("wolf-base", AnimalMode.Predator, 0.95f, 45f, 12f, 1.6f, 6.0f, 16f, "food", 2),
-        new Species("red-fox", AnimalMode.Predator, 0.6f, 25f, 6f, 1.8f, 6.2f, 10f, "food", 1),
-        new Species("black-bear", AnimalMode.Predator, 1.45f, 110f, 24f, 1.3f, 5.0f, 12f, "food", 5),
+        // small and early
+        new Species("rat-base", AnimalMode.Predator, 0.3f, 10f, 4f, 1.5f, 4.2f, 7f, "fiber", 1),
+        new Species("red-fox", AnimalMode.Predator, 0.6f, 25f, 6f, 1.8f, 6.2f, 9f, "food", 1),
         new Species("farm-dog", AnimalMode.Predator, 0.7f, 30f, 8f, 1.8f, 5.8f, 12f, "food", 1),
+        new Species("compsognathus-base", AnimalMode.Predator, 0.5f, 14f, 5f, 1.8f, 6.0f, 10f, "food", 1),
+        new Species("frog-base", AnimalMode.Prey, 0.25f, 5f, 0f, 0.8f, 3.5f, 5f, "food", 1),
+        // mid
+        new Species("wolf-base", AnimalMode.Predator, 0.95f, 45f, 12f, 1.6f, 6.0f, 16f, "food", 2),
+        new Species("garden-orb-weaver-base", AnimalMode.Predator, 0.7f, 35f, 10f, 1.5f, 5.0f, 11f, "fiber", 3),
+        new Species("stone-centipede-base", AnimalMode.Predator, 0.45f, 30f, 9f, 1.4f, 4.2f, 9f, "scrap", 1),
+        new Species("crocodile-base", AnimalMode.Predator, 0.6f, 90f, 20f, 1.0f, 4.0f, 9f, "food", 4),
+        new Species("alien-hive-bug-base", AnimalMode.Predator, 1.0f, 40f, 14f, 1.4f, 4.8f, 12f, "scrap", 1),
+        new Species("praying-mantis-base", AnimalMode.Predator, 1.5f, 50f, 12f, 1.5f, 4.8f, 11f, "fiber", 3),
+        new Species("tarantula-base", AnimalMode.Predator, 0.8f, 60f, 15f, 1.5f, 5.2f, 12f, "fiber", 4),
+        // big and late
+        new Species("black-bear", AnimalMode.Predator, 1.45f, 110f, 24f, 1.3f, 5.0f, 12f, "food", 5),
         new Species("lion-base", AnimalMode.Predator, 1.25f, 80f, 18f, 1.7f, 6.4f, 16f, "food", 4),
         new Species("velociraptor-base", AnimalMode.Predator, 1.7f, 70f, 18f, 2.0f, 7.0f, 20f, "food", 3),
         new Species("tyrannosaurus-base", AnimalMode.Predator, 5.2f, 400f, 45f, 1.6f, 5.2f, 26f, "food", 12),
-    };
-
-    public static readonly Species[] Lurkers =
-    {
-        new Species("rat-base", AnimalMode.Predator, 0.3f, 10f, 4f, 1.5f, 4.2f, 7f, "cloth", 1, true),
-        new Species("alien-hive-bug-base", AnimalMode.Predator, 1.0f, 40f, 14f, 1.4f, 4.8f, 12f, "scrap", 1, true),
-        new Species("praying-mantis-base", AnimalMode.Predator, 1.5f, 50f, 12f, 1.5f, 4.8f, 11f, "cloth", 2, true),
-        new Species("stone-centipede-base", AnimalMode.Predator, 0.45f, 30f, 9f, 1.4f, 4.2f, 9f, "scrap", 1, true),
-    };
-
-    public static readonly Species[] Prey =
-    {
+        // things that only walk at night
+        new Species("flesh-eater-base", AnimalMode.Predator, 1.8f, 55f, 14f, 1.2f, 4.4f, 18f, "cloth", 1),
+        new Species("undead-pirate-base", AnimalMode.Predator, 1.8f, 80f, 18f, 1.2f, 4.6f, 18f, "scrap", 2),
+        new Species("ashen-assassin-base", AnimalMode.Predator, 1.8f, 70f, 22f, 1.6f, 6.0f, 20f, "cloth", 2),
+        // game
         new Species("rabbit-base", AnimalMode.Prey, 0.35f, 8f, 0f, 1.2f, 6.5f, 9f, "food", 1),
         new Species("mountain-hare-base", AnimalMode.Prey, 0.4f, 8f, 0f, 1.2f, 6.8f, 9f, "food", 1),
         new Species("chicken-base", AnimalMode.Prey, 0.45f, 6f, 0f, 1.0f, 4.0f, 6f, "food", 1),
         new Species("forest-deer", AnimalMode.Prey, 1.5f, 35f, 0f, 1.5f, 7.5f, 16f, "food", 4),
+        new Species("sheep-base", AnimalMode.Prey, 0.95f, 25f, 0f, 1.2f, 5.0f, 8f, "food", 3),
+        new Species("pig-base", AnimalMode.Prey, 0.8f, 30f, 0f, 1.2f, 5.2f, 8f, "food", 3),
         new Species("goat-base", AnimalMode.Prey, 0.95f, 25f, 0f, 1.3f, 5.5f, 9f, "food", 3),
-        new Species("alpine-ibex-base", AnimalMode.Prey, 1.15f, 35f, 0f, 1.3f, 6.0f, 11f, "food", 3),
     };
+
+    public static Species Get(string model)
+    {
+        foreach (var s in All) if (s.model == model) return s;
+        return null;
+    }
 
     public static readonly Species[] Raiders =
     {

@@ -96,7 +96,7 @@ public class Hud : MonoBehaviour
         var clock = GameClock.Instance;
         var run = RunManager.Instance != null ? RunManager.Instance.Current : null;
         var player = PlayerController.Instance;
-        if (clock == null || run == null || !GameState.Playing || GameState.MenuOpen) return;
+        if (clock == null || run == null || !GameState.Playing || GameState.MenuOpen || MapView.Showing) return;
         Styles();
         float W = Screen.width, H = Screen.height;
 
@@ -149,15 +149,20 @@ public class Hud : MonoBehaviour
         GUI.Label(new Rect(W - sw, 38, sw - 12, 22), "Base defense " + BaseStructure.TotalDefense().ToString("F0")
                   + (run.hungry ? "    HUNGRY: no healing today" : ""), small);
 
+        // ---- level
+        Panel(new Rect(12, 90, 300, 26));
+        GUI.Label(new Rect(24, 92, 90, 22), "Level " + Progress.Level, small);
+        Bar(new Rect(100, 97, 200, 12), Progress.Fraction, new Color(0.45f, 0.7f, 1f));
+
         // ---- tutorial
         if (Tutorial.Active)
         {
-            Panel(new Rect(12, 94, 470, 58), 0.6f);
+            Panel(new Rect(12, 122, 470, 58), 0.6f);
             GUI.color = new Color(1f, 0.85f, 0.4f);
-            GUI.Label(new Rect(24, 96, 450, 20), "NEXT STEP  (" + Tutorial.Progress + ")", small);
+            GUI.Label(new Rect(24, 124, 450, 20), "NEXT STEP  (" + Tutorial.Progress + ")", small);
             GUI.color = Color.white;
             var wrap = new GUIStyle(small) { wordWrap = true };
-            GUI.Label(new Rect(24, 114, 450, 38), Tutorial.Current, wrap);
+            GUI.Label(new Rect(24, 142, 450, 38), Tutorial.Current, wrap);
         }
 
         // ---- raid
@@ -215,7 +220,9 @@ public class Hud : MonoBehaviour
             if (!string.IsNullOrEmpty(player.Prompt))
             {
                 KeyHint(W / 2f, py, Keybinds.Describe(GameAction.Interact), player.Prompt);
-                py -= 40f;
+                if (player.HoldProgress >= 0f)
+                    Bar(new Rect(W / 2f - 130, py + 34, 260, 12), player.HoldProgress, new Color(1f, 0.82f, 0.35f));
+                py -= 46f;
             }
             if (!string.IsNullOrEmpty(player.RopePrompt))
             {
@@ -254,7 +261,7 @@ public class Hud : MonoBehaviour
             GUI.Label(new Rect(300, H - 30, W - 320, 22),
                 K(GameAction.Interact) + " use    " + K(GameAction.Inventory) + " craft    " + K(GameAction.Attack) + " attack    "
                 + K(GameAction.Heavy) + " heavy    " + K(GameAction.SwapWeapon) + " weapon    " + K(GameAction.Grapple) + " rope    "
-                + K(GameAction.Use) + " heal    " + K(GameAction.ToggleView) + " view    " + K(GameAction.Pause) + " menu", small);
+                + K(GameAction.Use) + " heal    " + K(GameAction.Map) + " map    " + K(GameAction.ToggleView) + " view    " + K(GameAction.Pause) + " menu", small);
             GUI.color = Color.white;
         }
     }

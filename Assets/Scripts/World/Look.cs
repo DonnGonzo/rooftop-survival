@@ -106,7 +106,8 @@ public static class Look
             case "windows": Windows(px, rng); break;
             case "planks": Planks(px, rng); break;
             case "plaster": Plaster(px, rng); break;
-            case "roadline": RoadLine(px, rng); break;
+            case "roadline": RoadLine(px, rng, true); break;
+            case "roadline_x": RoadLine(px, rng, false); break;
             default: for (int i = 0; i < px.Length; i++) px[i] = Color.white; break;
         }
         t = new Texture2D(Size, Size, TextureFormat.RGBA32, true);
@@ -155,11 +156,11 @@ public static class Look
                 float v = 0.7f + (Noise(x, y, 6f, 5f) - 0.5f) * 0.2f + ((float)rng.NextDouble() - 0.5f) * 0.16f;
                 if (x % 128 < 3) v -= 0.22f;                       // sheet seams
                 if (y % 256 < 2) v -= 0.18f;
-                float patch = Mathf.SmoothStep(0.66f, 0.7f, Noise(x, y, 2.5f, 71f));
-                v = Mathf.Lerp(v, v * 0.72f, patch);               // tar patches
-                float moss = Mathf.SmoothStep(0.7f, 0.85f, Noise(x, y, 5f, 13f));
+                float patch = Mathf.SmoothStep(0.66f, 0.7f, Noise(x, y, 2f, 71f));
+                v = Mathf.Lerp(v, v * 0.82f, patch);               // tar patches
+                float moss = Mathf.SmoothStep(0.72f, 0.9f, Noise(x, y, 3f, 13f));
                 var c = Grey(v);
-                c = Color.Lerp(c, new Color(v * 0.7f, v * 0.95f, v * 0.6f), moss * 0.5f);
+                c = Color.Lerp(c, new Color(v * 0.8f, v * 0.95f, v * 0.72f), moss * 0.4f);
                 px[y * Size + x] = c;
             }
     }
@@ -170,11 +171,10 @@ public static class Look
             for (int x = 0; x < Size; x++)
             {
                 float v = 0.62f + (Noise(x, y, 5f, 2f) - 0.5f) * 0.2f + ((float)rng.NextDouble() - 0.5f) * 0.2f;
-                float crack = Mathf.Abs(Noise(x, y, 7f, 50f) - 0.5f);
-                if (crack < 0.012f) v *= 0.45f;
-                float weeds = Mathf.SmoothStep(0.72f, 0.8f, Noise(x, y, 4f, 90f));
-                var c = Grey(v);
-                c = Color.Lerp(c, new Color(0.5f, 0.75f, 0.35f), weeds * 0.55f);
+                float crack = Mathf.Abs(Noise(x, y, 3f, 50f) - 0.5f);
+                if (crack < 0.004f) v *= 0.6f;
+                float patch = Mathf.SmoothStep(0.62f, 0.66f, Noise(x, y, 2f, 90f));
+                var c = Grey(v * Mathf.Lerp(1f, 0.86f, patch));
                 px[y * Size + x] = c;
             }
     }
@@ -297,27 +297,32 @@ public static class Look
             for (int x = 0; x < Size; x++)
             {
                 float v = 0.85f + (Noise(x, y, 4f, 17f) - 0.5f) * 0.16f + ((float)rng.NextDouble() - 0.5f) * 0.04f;
-                float damp = Mathf.SmoothStep(0.6f, 0.85f, Noise(x, y, 3f, 61f));
+                float damp = Mathf.SmoothStep(0.62f, 0.9f, Noise(x, y, 2f, 61f));
                 var c = Grey(v);
-                c = Color.Lerp(c, new Color(v * 0.75f, v * 0.8f, v * 0.62f), damp * 0.6f);
-                float crack = Mathf.Abs(Noise(x, y, 6f, 33f) - 0.5f);
-                if (crack < 0.008f) c *= 0.6f;
+                c = Color.Lerp(c, new Color(v * 0.86f, v * 0.84f, v * 0.74f), damp * 0.5f);
                 c.a = 1f;
                 px[y * Size + x] = c;
             }
     }
 
-    /// <summary>Asphalt with one worn dashed centre line running along V.</summary>
-    static void RoadLine(Color[] px, System.Random rng)
+    /// <summary>
+    /// Asphalt with a worn dashed centre line on the tile edge, so the line falls on whole multiples of the
+    /// tile size in world space (road centres are placed there). alongV: the line runs along V (world Z).
+    /// </summary>
+    static void RoadLine(Color[] px, System.Random rng, bool alongV)
     {
         Asphalt(px, rng);
-        for (int y = 0; y < Size; y++)
-            for (int x = 122; x < 134; x++)
+        for (int a = 0; a < Size; a++)
+        {
+            if (a % 128 > 72) continue;   // dashes
+            for (int k = -5; k <= 5; k++)
             {
-                if (y % 128 > 70) continue;
-                if (Noise(x, y, 20f, 3f) < 0.35f) continue;   // worn away
-                px[y * Size + x] = Color.Lerp(px[y * Size + x], new Color(1.6f, 1.5f, 1.1f), 0.8f);
+                int b = (k + Size) % Size;
+                int x = alongV ? b : a, y = alongV ? a : b;
+                if (Noise(x, y, 20f, 3f) < 0.36f) continue;   // worn away
+                px[y * Size + x] = Color.Lerp(px[y * Size + x], new Color(1f, 0.95f, 0.75f), 0.85f);
             }
+        }
     }
 
     static float Hash(int a, int b)

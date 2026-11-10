@@ -55,7 +55,7 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
-        if (GameState.Frozen || busy) { Prompt = ""; RopePrompt = ""; return; }
+        if (GameState.Frozen || busy) { Prompt = ""; RopePrompt = ""; HoldProgress = -1f; return; }
 
         var look = Inp.Look() * GameSettings.Sensitivity;
         transform.Rotate(0f, look.x, 0f);
@@ -91,16 +91,53 @@ public class PlayerController : MonoBehaviour
         Prompt = focus != null ? focus.Prompt : "";
         RopePrompt = AtRopeTop() ? "Rappel down to the street" : AtRopeFoot() ? "Climb the rope to your roof" : "";
 
-        if (Inp.Interact())
-        {
-            if (focus != null) focus.Use();
-            else Hud.Toast("Nothing to use here.");
-        }
+        HandleInteract();
         if (Inp.Build()) PlaceBuild();
         if (Inp.CycleBuild()) Items.CycleBuild();
         if (Inp.SwapWeapon()) Items.CycleWeapon();
         if (Inp.Grapple()) UseRope();
         if (Inp.Use()) Hud.Toast(Items.UseBest());
+        if (Inp.Map()) MapView.Toggle();
+    }
+
+    /// <summary>0..1 while a hold action (searching, building at a station) is under way; -1 when there is none.</summary>
+    public float HoldProgress { get; private set; } = -1f;
+    Interactable holdTarget;
+    float holdTime;
+
+    void HandleInteract()
+    {
+        HoldProgress = -1f;
+        if (focus == null)
+        {
+            holdTarget = null;
+            if (Inp.Interact()) Hud.Toast("Nothing to use here.");
+            return;
+        }
+
+        if (focus.TakesWork)
+        {
+            // A station with an order: every moment the key is held is work done on it.
+            if (Inp.InteractHeld()) focus.Work(Time.deltaTime);
+            HoldProgress = focus.WorkProgress;
+        }
+        else if (focus.HoldSeconds > 0f)
+        {
+            if (focus != holdTarget) { holdTarget = focus; holdTime = 0f; }
+            if (Inp.InteractHeld())
+            {
+                holdTime += Time.deltaTime;
+                HoldProgress = Mathf.Clamp01(holdTime / focus.HoldSeconds);
+                if (holdTime >= focus.HoldSeconds)
+                {
+                    holdTime = 0f;
+                    holdTarget = null;
+                    focus.Use();
+                }
+            }
+            else holdTime = 0f;
+        }
+        else if (Inp.Interact()) focus.Use();
     }
 
     // ---------------------------------------------------------------- health

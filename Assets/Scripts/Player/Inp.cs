@@ -31,6 +31,10 @@ public static class Inp
     }
 
     public static bool Interact() => Keybinds.Pressed(GameAction.Interact);
+    /// <summary>Test hook: behaves as if Interact were held.</summary>
+    public static bool HoldOverride;
+    public static bool InteractHeld() => HoldOverride || Keybinds.Held(GameAction.Interact);
+    public static bool Map() => Keybinds.Pressed(GameAction.Map);
     public static bool Build() => Keybinds.Pressed(GameAction.Build);
     public static bool CycleBuild() => Keybinds.Pressed(GameAction.CycleBuild);
     public static bool SwapWeapon() => Keybinds.Pressed(GameAction.SwapWeapon);

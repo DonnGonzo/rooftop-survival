@@ -19,7 +19,7 @@ public class PlayerBody : MonoBehaviour
     [Tooltip("Turn the model if it faces backwards.")]
     public float yawOffset = 0f;
     [Tooltip("First person: how far the body sits behind the eyes, in metres.")]
-    public float firstPersonSetback = 0.13f;
+    public float firstPersonSetback = 0.06f;
     [Tooltip("Third-person camera position relative to the first-person camera: right, up, back.")]
     public Vector3 thirdPersonOffset = new Vector3(0.55f, 0.2f, -3.0f);
     [Tooltip("Degrees the chest turns into a strike.")]
@@ -27,9 +27,11 @@ public class PlayerBody : MonoBehaviour
 
     public bool ThirdPerson => thirdPerson;
 
-    GameObject model;
+    GameObject model, shadowTwin;
     Animation anim;
-    Transform headBone, chest;
+    Transform headBone, chest, hips;
+    Transform[] bones, twinBones;
+    Vector3 hipsRest;
     Transform rArm, rFore, rHand, lArm, lFore, lHand;
     Hand rightHand, leftHand;
     readonly System.Collections.Generic.List<Renderer> headParts = new System.Collections.Generic.List<Renderer>();
@@ -50,7 +52,7 @@ public class PlayerBody : MonoBehaviour
             this.right = right;
             foreach (var t in hand.GetComponentsInChildren<Transform>(true))
             {
-                if (t == hand || t.childCount == 0 && t.parent == hand) continue;
+                if (t == hand || (t.childCount == 0 && t.parent == hand)) continue;
                 string n = t.name.ToLowerInvariant();
                 bool isThumb = n.Contains("thumb");
                 if (t.parent == hand)
@@ -59,7 +61,6 @@ public class PlayerBody : MonoBehaviour
                     else if (n.Contains("pinky")) pinky = t;
                     else if (n.Contains("middle")) middle = t;
                 }
-                if (t.childCount == 0) continue;   // fingertip end bones have nothing to bend
                 (isThumb ? thumb : fingers).Add(t);
             }
         }
@@ -90,7 +91,9 @@ public class PlayerBody : MonoBehaviour
                 // One bend axis per finger, taken at its knuckle, so every joint curls the same way.
                 if (j.parent == hand) axis = Vector3.Cross(j.GetChild(0).position - j.position, palm).normalized;
                 if (axis.sqrMagnitude < 0.5f) continue;
-                j.rotation = Quaternion.AngleAxis((j.parent == hand ? 70f : 85f) * amount, axis) * j.rotation;
+                // knuckle, middle joint, fingertip
+                float bend = j.parent == hand ? 62f : j.parent.parent == hand ? 95f : 72f;
+                j.rotation = Quaternion.AngleAxis(bend * amount, axis) * j.rotation;
             }
             foreach (var j in thumb)
             {
@@ -125,20 +128,21 @@ public class PlayerBody : MonoBehaviour
         anim = model.GetComponentInChildren<Animation>(true);
         if (anim == null) Debug.LogWarning("[PlayerBody] '" + key + "' has no Animation component. Set its importer Animation to Legacy.");
         foreach (var r in model.GetComponentsInChildren<SkinnedMeshRenderer>(true))
-        {
             r.updateWhenOffscreen = true;   // the body is always right at the camera; never cull it by stale bounds
-            r.shadowCastingMode = ShadowCastingMode.On;
-        }
 
         Transform root = model.transform;
         headBone = FindBone(root, "head");
+        hips = FindBone(root, "hips", "pelvis");
+        if (hips != null) hipsRest = root.InverseTransformPoint(hips.position);
         chest = FindBone(root, "spine2", "spine_03", "spine1", "spine_02");
+        // Each joint is looked for under the one before it, so helper bones elsewhere in the rig
+        // (IK targets, twist bones) with similar names are never picked by mistake.
         rArm = FindBone(root, "rightarm", "upperarm_r");
-        rFore = FindBone(root, "rightforearm", "lowerarm_r");
-        rHand = FindBone(root, "righthand", "hand_r");
+        rFore = rArm != null ? FindBone(rArm, "rightforearm", "lowerarm_r") : null;
+        rHand = rFore != null ? FindBone(rFore, "righthand", "hand_r") : null;
         lArm = FindBone(root, "leftarm", "upperarm_l");
-        lFore = FindBone(root, "leftforearm", "lowerarm_l");
-        lHand = FindBone(root, "lefthand", "hand_l");
+        lFore = lArm != null ? FindBone(lArm, "leftforearm", "lowerarm_l") : null;
+        lHand = lFore != null ? FindBone(lFore, "lefthand", "hand_l") : null;
         if (rHand != null) rightHand = new Hand(rHand, true);
         if (lHand != null) leftHand = new Hand(lHand, false);
         // Separate head pieces (hair, hat, beard, glasses): hidden in first person along with the head itself.
@@ -146,6 +150,7 @@ public class PlayerBody : MonoBehaviour
             foreach (var r in model.GetComponentsInChildren<Renderer>(true))
                 if (r.bounds.min.y > headBone.position.y - 0.14f) headParts.Add(r);
         melee = GetComponent<MeleeCombat>();
+        MakeShadowTwin();
         ApplyView();
         Play("idle");
     }
@@ -164,13 +169,39 @@ public class PlayerBody : MonoBehaviour
         ApplyView();
     }
 
+    /// <summary>
+    /// A second copy of the body that is never drawn, only casts the shadow. In first person the visible body
+    /// has no head and sits behind the eyes; the twin keeps its head and stands where the player really is,
+    /// so the shadow on the ground is always a whole person.
+    /// </summary>
+    void MakeShadowTwin()
+    {
+        shadowTwin = Instantiate(model, transform);
+        shadowTwin.name = "ShadowBody";
+        shadowTwin.transform.localPosition = Vector3.zero;
+        shadowTwin.transform.localRotation = model.transform.localRotation;
+        foreach (var a in shadowTwin.GetComponentsInChildren<Animation>(true)) Destroy(a);
+        foreach (var r in shadowTwin.GetComponentsInChildren<Renderer>(true))
+        {
+            r.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
+            r.receiveShadows = false;
+        }
+        bones = model.GetComponentsInChildren<Transform>(true);
+        twinBones = shadowTwin.GetComponentsInChildren<Transform>(true);
+        if (bones.Length != twinBones.Length) { Destroy(shadowTwin); shadowTwin = null; }
+    }
+
     void ApplyView()
     {
         CameraFeel.viewOffset = thirdPerson ? thirdPersonOffset : Vector3.zero;
+        if (model == null) return;
+        bool twin = !thirdPerson && shadowTwin != null;
+        if (shadowTwin != null) shadowTwin.SetActive(twin);
+        foreach (var r in model.GetComponentsInChildren<Renderer>(true))
+            r.shadowCastingMode = twin ? ShadowCastingMode.Off : ShadowCastingMode.On;
         foreach (var r in headParts)
-            if (r != null) r.shadowCastingMode = thirdPerson ? ShadowCastingMode.On : ShadowCastingMode.ShadowsOnly;
-        if (model != null)
-            model.transform.localPosition = thirdPerson ? Vector3.zero : new Vector3(0f, 0f, -firstPersonSetback);
+            if (r != null) r.enabled = thirdPerson;
+        model.transform.localPosition = thirdPerson ? Vector3.zero : new Vector3(0f, 0f, -firstPersonSetback);
     }
 
     /// <summary>Runs after the Animation component has posed the skeleton for this frame.</summary>
@@ -178,24 +209,57 @@ public class PlayerBody : MonoBehaviour
     {
         if (model == null) return;
 
-        // First person: no head in front of the eyes (the hat, hair and glasses are skinned to it and go too).
-        if (headBone != null) headBone.localScale = thirdPerson ? Vector3.one : Vector3.one * 0.001f;
+        // The clips move the hips forward as they play and snap back when they loop. The player is moved by
+        // the controller, not by the clip, so keep the hips over the feet and take only the up-and-down bounce.
+        if (hips != null)
+        {
+            Vector3 p = model.transform.InverseTransformPoint(hips.position);
+            p.x = hipsRest.x;
+            p.z = hipsRest.z;
+            hips.position = model.transform.TransformPoint(p);
+        }
 
+        // Looking down, the body slides further back so you see your chest and feet, not down your own collar.
+        if (!thirdPerson)
+        {
+            var pc = PlayerController.Instance;
+            float down = pc != null ? Mathf.Clamp01((pc.Pitch - 20f) / 50f) : 0f;
+            model.transform.localPosition = new Vector3(0f, 0f, -Mathf.Lerp(firstPersonSetback, firstPersonSetback + 0.3f, down));
+        }
+
+        if (headBone != null) headBone.localScale = Vector3.one;
+        Pose();
+        if (shadowTwin != null && shadowTwin.activeSelf)
+            for (int i = 1; i < bones.Length; i++)
+            {
+                twinBones[i].localPosition = bones[i].localPosition;
+                twinBones[i].localRotation = bones[i].localRotation;
+                twinBones[i].localScale = bones[i].localScale;
+            }
+
+        // First person: no head in front of the eyes. Done after the twin was copied, so the shadow keeps its head.
+        if (headBone != null && !thirdPerson) headBone.localScale = Vector3.one * 0.001f;
+    }
+
+    /// <summary>Strike pose on top of the clip: the torso turns and leans in, the arms reach for their targets.</summary>
+    void Pose()
+    {
         if (melee == null || melee.Aim == null) return;
 
-        if (chest != null && Mathf.Abs(melee.Twist) > 0.001f)
-            chest.rotation = Quaternion.AngleAxis(-melee.Twist * twistDegrees, Vector3.up) * chest.rotation;
+        if (chest != null && (Mathf.Abs(melee.Twist) > 0.001f || melee.Lean > 0.001f))
+            chest.rotation = Quaternion.AngleAxis(-melee.Twist * twistDegrees, Vector3.up)
+                           * Quaternion.AngleAxis(melee.Lean * 9f, transform.right) * chest.rotation;
 
         Vector3 right = transform.right, down = -transform.up, back = -transform.forward;
         // Knuckles lead: fingers along the view, tipped up a little; palms face each other.
-        Vector3 fingersTo = (melee.Aim.forward + melee.Aim.up * 0.35f).normalized;
+        Vector3 fingersTo = (melee.Aim.forward + melee.Aim.up * 0.3f).normalized;
         if (melee.RightWeight > 0.001f && rArm != null && rFore != null && rHand != null)
         {
             ReachFor(rArm, rFore, rHand, melee.RightTarget.position,
                      rArm.position + right * 0.18f + down * 0.6f + back * 0.2f, melee.RightWeight);
             if (rightHand != null)
             {
-                rightHand.Orient(fingersTo, (-right + down * 0.3f).normalized, melee.RightWeight);
+                rightHand.Orient(fingersTo, Vector3.Slerp((-right + down * 0.3f).normalized, down, melee.Armed ? 0f : melee.RightExtend), melee.RightWeight);
                 rightHand.Curl(melee.RightWeight);
             }
         }
@@ -205,7 +269,7 @@ public class PlayerBody : MonoBehaviour
                      lArm.position - right * 0.18f + down * 0.6f + back * 0.2f, melee.LeftWeight);
             if (leftHand != null)
             {
-                leftHand.Orient(fingersTo, (right + down * 0.3f).normalized, melee.LeftWeight);
+                leftHand.Orient(fingersTo, Vector3.Slerp((right + down * 0.3f).normalized, down, melee.LeftExtend), melee.LeftWeight);
                 leftHand.Curl(melee.LeftWeight);
             }
         }
