@@ -55,7 +55,9 @@ public static class SceneBootstrap
         clock.sunColor = MakeSunGradient();
         clock.maxSunIntensity = 1.15f;
         mgr.AddComponent<NightDirector>();
-        mgr.AddComponent<Survival>();
+        mgr.AddComponent<Needs>();
+        mgr.AddComponent<FactionDirector>();
+        mgr.AddComponent<MusicDirector>();
         mgr.AddComponent<SpawnDirector>();
         mgr.AddComponent<Hud>();
         mgr.AddComponent<InventoryUI>();

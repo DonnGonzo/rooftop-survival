@@ -138,6 +138,9 @@ public static class Diag
         what = what.Trim();
         if (what == "container") { foreach (var c in Object.FindObjectsByType<Container>()) if (!c.Empty && c.transform.position.y < -50f) consider(c.transform); }
         else if (what == "animal") { foreach (var a in AnimalAI.All) consider(a.transform); }
+        else if (what == "attacker") { var e = FactionDirector.Current; if (e != null) foreach (var a in e.attackers) if (a != null) consider(a.transform); }
+        else if (what == "drifter") { var e = FactionDirector.Current; if (e != null) foreach (var a in e.members) if (a != null) consider(a.transform); }
+        else if (what == "kit") { var e = FactionDirector.Current; if (e != null) foreach (var c in Object.FindObjectsByType<Container>()) if ((c.transform.position - e.pos).sqrMagnitude < 400f) consider(c.transform); }
         else foreach (var n in Object.FindObjectsByType<ResourceNode>())
             if (!n.Spent && n.kind.ToString().ToLower() == what) consider(n.transform);
         if (best == null) return "none";
@@ -203,6 +206,37 @@ public static class Diag
     }
 
     public static string Character(string i) { GameSettings.CharacterIndex = (int)F(i); return Characters.Current.name; }
+
+    public static string Camp(string a) { FactionDirector.Instance.Begin(a.Trim() == "attack"); var e = FactionDirector.Current; return "camp at " + e.pos.ToString("F0") + " members=" + e.members.Count + " attackers=" + e.attackers.Count; }
+    public static string CampInfo()
+    {
+        var e = FactionDirector.Current;
+        if (e == null) return "no camp, rep=" + Faction.Reputation;
+        return "camp " + e.pos.ToString("F0") + " alive=" + e.Alive + " underAttack=" + e.UnderAttack + " helped=" + e.playerHelped + " resolved=" + e.resolved + " rep=" + Faction.Reputation + " " + Faction.Standing;
+    }
+    public static string Rep(string a) { Faction.Change((int)F(a), "test"); return Faction.Standing; }
+    public static string Needs_()
+    {
+        var n = Needs.Instance;
+        return "hunger " + n.Hunger.ToString("F0") + " thirst " + n.Thirst.ToString("F0") + " stamina " + n.Stamina.ToString("F0") + "/" + n.MaxStamina + " weight " + Items.CarriedWeight.ToString("F1") + "/" + Items.Capacity + " points " + Progress.Points + " maxhp " + PlayerController.Instance.maxHealth;
+    }
+    public static string Ui(string a)
+    {
+        a = a.Trim();
+        if (a == "close") { GameState.UiOpen = false; return "closed"; }
+        if (a == "menu") { GameState.MenuOpen = true; return "menu"; }
+        if (a == "title") { GameState.MenuOpen = true; GameState.HasStarted = false; return "title"; }
+        if (a == "resume") { GameState.MenuOpen = false; GameState.HasStarted = true; GameState.Playing = true; return "resumed"; }
+        InventoryUI.Show((InventoryUI.Tab)System.Enum.Parse(typeof(InventoryUI.Tab), a));
+        return "ui " + a;
+    }
+    public static string Spend(string a) { return Progress.Spend(a.Trim()).ToString(); }
+    public static string Audio()
+    {
+        var sb = new StringBuilder();
+        foreach (string n in new[] { "swing", "punch", "chop", "music_menu", "music_day", "amb_roof", "v_m_greet", "growl" }) sb.Append(n + "=" + Sfx.Has(n) + " ");
+        return sb.ToString();
+    }
 
     public static string Pending() { return steps.Count.ToString(); }
 

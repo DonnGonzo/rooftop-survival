@@ -344,7 +344,7 @@ public static class StreetBuilder
         col.radius = 0.38f / s;
         col.height = height / s;
         col.center = new Vector3(0f, height / s / 2f, 0f);
-        ResourceNode.Add(go, ResourceNode.Kind.Tree, 3 + Mathf.RoundToInt(height / 3f), 3);
+        ResourceNode.Add(go, ResourceNode.Kind.Tree, 3 + Mathf.RoundToInt(height / 3f), 4f);
         return go;
     }
 
@@ -354,7 +354,7 @@ public static class StreetBuilder
         var go = ModelLibrary.Spawn(key, null, pos, (float)rng.NextDouble() * 360f, fitFootprint: size, addCollider: true, keepAnimations: false);
         if (go == null) return null;
         go.transform.SetParent(parent, true);
-        ResourceNode.Add(go, kind, kind == ResourceNode.Kind.Ore ? 6 : 3 + Mathf.RoundToInt(size), 4);
+        ResourceNode.Add(go, kind, kind == ResourceNode.Kind.Ore ? 6 : 3 + Mathf.RoundToInt(size), kind == ResourceNode.Kind.Ore ? 10f : 7f);
         return go;
     }
 

@@ -15,6 +15,7 @@ public class PlacedStructure
     public bool watered;      // planters: watered today
     public string order = ""; // stations: what is being built
     public float orderDone;   // stations: seconds of work done on it
+    public int orderCount = 1;// stations: how many are being made
 }
 
 [Serializable]
@@ -27,6 +28,10 @@ public class RunData
     public float roofQuality;               // 0 (terrible) .. 1 (great)
     public string equipped = "";            // weapon in hand ("" = fists)
     public int xp;                          // experience; the level is worked out from it
+    public int statVitality, statStrength, statCarry, statEndurance;   // points spent
+    public float hunger = 100f, thirst = 100f;
+    public int reputation;                  // standing with the Drifters, -100..100
+    public List<ItemStack> stash = new List<ItemStack>();   // what is stored in the roof chests
     public int waterDay;                    // last day the water tower was emptied
     public bool hungry;                     // missed food or water at the last dawn
     public List<int> looted = new List<int>();   // roof supply caches already taken
@@ -64,6 +69,7 @@ public class RunManager : MonoBehaviour
         if (Current == null) StartNewRun();
         if (Current.equipped == null) Current.equipped = "";
         if (Current.looted == null) Current.looted = new List<int>();
+        if (Current.stash == null) Current.stash = new List<ItemStack>();
     }
 
     public void StartNewRun()
@@ -91,16 +97,18 @@ public class RunManager : MonoBehaviour
                 if (s == null || (s.hp != null && s.hp.Dead)) continue;
                 var plot = s.GetComponent<FarmPlot>();
                 var station = s.GetComponent<CraftStation>();
+                var rain = s.GetComponent<RainCollector>();
                 Current.structures.Add(new PlacedStructure
                 {
                     id = s.id,
                     pos = s.transform.position,
                     yRot = s.transform.eulerAngles.y,
                     health = s.hp != null ? s.hp.current : 0f,
-                    stage = plot != null ? plot.Stage : -1,
+                    stage = plot != null ? plot.Stage : rain != null ? rain.stored : -1,
                     watered = plot != null && plot.Watered,
                     order = station != null ? station.orderId : "",
-                    orderDone = station != null ? station.done : 0f
+                    orderDone = station != null ? station.done : 0f,
+                    orderCount = station != null ? station.orderCount : 1
                 });
             }
         }

@@ -4,9 +4,10 @@ using UnityEngine;
 
 public enum AnimalMode
 {
-    Predator,   // wanders, chases and bites the player on its level
+    Predator,   // wanders, chases and bites the player (and Drifters) on its level
     Prey,       // wanders, runs from the player; hunt it for food
-    Raider      // night attacker on the roof: goes for the player, or wrecks what you built
+    Raider,     // night attacker on the roof: goes for the player, or wrecks what you built
+    Survivor    // a Drifter: fights off animals, and treats the player by their standing
 }
 
 /// <summary>What one species is like. Used by Wildlife.Spawn.</summary>
@@ -91,8 +92,10 @@ public static class Wildlife
         var hp = go.AddComponent<Health>();
         hp.max = sp.health;
         hp.current = sp.health;
-        hp.dropItem = sp.drop;
+        // Game and predators give raw meat, and the bigger ones a hide as well.
+        hp.dropItem = sp.drop == "food" ? "raw_meat" : sp.drop;
         hp.dropCount = sp.dropCount;
+        if (sp.drop == "food" && sp.health >= 25f) { hp.dropItem2 = "leather"; hp.dropCount2 = Mathf.Max(1, Mathf.RoundToInt(sp.health / 45f)); }
         hp.barRange = 14f;
 
         var ai = go.AddComponent<AnimalAI>();
@@ -105,7 +108,7 @@ public static class Wildlife
 }
 
 /// <summary>
-/// One animal. See AnimalMode for the three behaviours. It walks on a flat level (the street or the roof),
+/// One creature. See AnimalMode for the behaviours. It walks on a flat level (the street or the roof),
 /// turns away from walls it would walk into, and plays the model's own Walk / Run / Idle clips.
 /// </summary>
 public class AnimalAI : MonoBehaviour
@@ -121,14 +124,19 @@ public class AnimalAI : MonoBehaviour
     public float groundY = -90f;
     [Tooltip("Raiders: half the roof size, so they stay on it. Zero = no limit.")]
     public Vector2 stayWithin;
+    /// <summary>Set on animals sent against a Drifter camp: they go for the Drifters first, from any distance.</summary>
+    public bool huntsSurvivors;
+    /// <summary>Sound made when it first goes for something.</summary>
+    public string cry = "growl";
 
     public Health Hp { get; private set; }
 
     Vector3 home, target;
-    float nextPick, nextBite, idleUntil, heldUntil, steerUntil;
+    float nextPick, nextBite, idleUntil, heldUntil, steerUntil, nextCry;
     Vector3 steerDir;
     string anim = "";
     Collider body;
+    bool wasHunting;
 
     void OnEnable() { All.Add(this); }
     void OnDisable() { All.Remove(this); }
@@ -152,6 +160,21 @@ public class AnimalAI : MonoBehaviour
         if (body != null) body.enabled = false;   // don't trip over the body
         var a = GetComponentInChildren<Animation>();
         if (a != null) a.Stop();
+        if (mode != AnimalMode.Survivor) Sfx.PlayAt("death_animal", transform.position, 0.8f, 30f);
+    }
+
+    /// <summary>Runs the action the first time the player lands a blow on this creature.</summary>
+    public void Hp_OnHurtByPlayer(System.Action action)
+    {
+        var h = GetComponent<Health>();
+        if (h == null) return;
+        bool done = false;
+        h.OnHurt += source =>
+        {
+            if (done || (source != "strike" && source != "heavy strike")) return;
+            done = true;
+            action();
+        };
     }
 
     /// <summary>A snare holds the animal still for a while.</summary>
@@ -163,10 +186,11 @@ public class AnimalAI : MonoBehaviour
         if (Time.time < heldUntil) { SetAnim("idle"); return; }
 
         var p = PlayerController.Instance;
-        bool playerHere = p != null && Mathf.Abs(p.transform.position.y - groundY) < 5f;
+        bool playerHere = p != null && !p.Climbing && Mathf.Abs(p.transform.position.y - groundY) < 5f;
         Vector3 toPlayer = p != null ? p.transform.position - transform.position : Vector3.zero;
         toPlayer.y = 0f;
         float dist = toPlayer.magnitude;
+        bool hunting = false;
 
         switch (mode)
         {
@@ -176,19 +200,75 @@ public class AnimalAI : MonoBehaviour
                 break;
 
             case AnimalMode.Predator:
+            {
                 float night = (GameClock.Instance != null && GameClock.Instance.IsNight) ? 1.5f : 1f;
-                bool inLeash = !lurker || Vector3.Distance(p != null ? p.transform.position : home, home) < leash + aggroRadius;
-                if (playerHere && dist < aggroRadius * night && inLeash) Hunt(p, toPlayer, dist);
+                // A torch in the hand keeps the smaller ones back.
+                float reach = aggroRadius * night * (Items.Equipped != null && Items.Equipped.light && biteDamage < 15f ? 0.5f : 1f);
+                Health prey = NearestSurvivor(huntsSurvivors ? 200f : aggroRadius);
+                bool wantPlayer = playerHere && dist < reach;
+                if (prey != null && (huntsSurvivors || !wantPlayer || Vector3.Distance(prey.transform.position, transform.position) < dist))
+                {
+                    // If the player wades in close, turn on them instead.
+                    if (wantPlayer && dist < 5f) HuntPlayer(p, toPlayer, dist);
+                    else HuntOther(prey);
+                    hunting = true;
+                }
+                else if (wantPlayer) { HuntPlayer(p, toPlayer, dist); hunting = true; }
                 else Wander();
                 break;
+            }
 
             case AnimalMode.Raider:
                 Raid(p, playerHere, toPlayer, dist);
                 break;
+
+            case AnimalMode.Survivor:
+            {
+                if (Faction.Hostile && playerHere && dist < 20f) { HuntPlayer(p, toPlayer, dist); hunting = true; break; }
+                Health threat = NearestThreat(14f);
+                if (threat != null) { HuntOther(threat); break; }
+                if (playerHere && dist < 5f) { Face(toPlayer); SetAnim("idle"); break; }   // turn to whoever walks up
+                Wander();
+                break;
+            }
         }
+
+        if (hunting && !wasHunting && Time.time > nextCry)
+        {
+            nextCry = Time.time + 8f;
+            if (!string.IsNullOrEmpty(cry)) Sfx.PlayAt(cry, transform.position + Vector3.up * 0.5f, 0.9f, 40f);
+        }
+        wasHunting = hunting;
     }
 
-    void Hunt(PlayerController p, Vector3 toPlayer, float dist)
+    Health NearestSurvivor(float range)
+    {
+        Health best = null;
+        float bd = range;
+        foreach (var s in Survivor.All)
+        {
+            if (s == null || s.Hp == null || s.Hp.Dead || Mathf.Abs(s.transform.position.y - groundY) > 5f) continue;
+            float d = Vector3.Distance(transform.position, s.transform.position);
+            if (d < bd) { bd = d; best = s.Hp; }
+        }
+        return best;
+    }
+
+    Health NearestThreat(float range)
+    {
+        Health best = null;
+        float bd = range;
+        foreach (var a in All)
+        {
+            if (a == null || a == this || a.Hp == null || a.Hp.Dead) continue;
+            if (a.mode != AnimalMode.Predator && a.mode != AnimalMode.Raider) continue;
+            float d = Vector3.Distance(transform.position, a.transform.position);
+            if (d < bd) { bd = d; best = a.Hp; }
+        }
+        return best;
+    }
+
+    void HuntPlayer(PlayerController p, Vector3 toPlayer, float dist)
     {
         if (dist > biteRange * 0.8f) MoveToward(toPlayer.normalized, runSpeed, "run");
         else { Face(toPlayer); SetAnim("idle"); }
@@ -197,6 +277,24 @@ public class AnimalAI : MonoBehaviour
         {
             nextBite = Time.time + biteCooldown;
             p.TakeDamage(biteDamage, Nice(name));
+            Sfx.PlayAt(mode == AnimalMode.Survivor ? "punch" : "bite", transform.position, 1f, 25f);
+            StartCoroutine(Lunge());
+        }
+    }
+
+    void HuntOther(Health prey)
+    {
+        Vector3 to = prey.transform.position - transform.position;
+        to.y = 0f;
+        float dist = to.magnitude;
+        if (dist > biteRange * 0.8f) MoveToward(to.normalized, runSpeed, "run");
+        else { Face(to); SetAnim("idle"); }
+
+        if (dist < biteRange + 0.4f && Time.time >= nextBite)
+        {
+            nextBite = Time.time + biteCooldown;
+            prey.TakeDamage(biteDamage, name);
+            Sfx.PlayAt(mode == AnimalMode.Survivor ? "punch" : "bite", transform.position, 0.8f, 25f);
             StartCoroutine(Lunge());
         }
     }
@@ -207,7 +305,7 @@ public class AnimalAI : MonoBehaviour
         var wall = BaseStructure.Nearest(transform.position, 2.4f, "barricade");
         if (wall != null) { Attack(wall); return; }
 
-        if (playerHere && dist < aggroRadius) { Hunt(p, toPlayer, dist); return; }
+        if (playerHere && dist < aggroRadius) { HuntPlayer(p, toPlayer, dist); return; }
 
         var s = BaseStructure.Nearest(transform.position, 80f);
         if (s == null) { Wander(); return; }
@@ -226,6 +324,7 @@ public class AnimalAI : MonoBehaviour
         if (Time.time < nextBite) return;
         nextBite = Time.time + biteCooldown;
         s.Damage(biteDamage, "raid");
+        Sfx.PlayAt("break", s.transform.position, 0.6f, 25f);
         StartCoroutine(Lunge());
     }
 
@@ -333,18 +432,11 @@ public class AnimalAI : MonoBehaviour
                        : clip == "walk" ? new[] { "walk", "crawl", "fly", "run" }
                        : new[] { "idle", "walk", "crawl" };
         ModelLibrary.PlayClip(gameObject, names);
-        if (clip == "idle")
-        {
-            // A model with no idle clip stands still rather than walking on the spot.
-            var a = GetComponentInChildren<Animation>();
-            if (a != null && a.GetClip("Idle") == null && a.GetClip("idle") == null)
-                foreach (AnimationState s in a) s.speed = 0f;
-        }
-        else
-        {
-            var a = GetComponentInChildren<Animation>();
-            if (a != null) foreach (AnimationState s in a) s.speed = 1f;
-        }
+        var a = GetComponentInChildren<Animation>();
+        if (a == null) return;
+        // A model with no idle clip stands still rather than walking on the spot.
+        bool freeze = clip == "idle" && a.GetClip("Idle") == null && a.GetClip("idle") == null;
+        foreach (AnimationState s in a) s.speed = freeze ? 0f : 1f;
     }
 
     static string Nice(string n)

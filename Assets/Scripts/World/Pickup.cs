@@ -58,6 +58,7 @@ public class Pickup : Interactable
         Items.Add(itemId, count);
         var def = Items.Def(itemId);
         Hud.Toast("+" + count + " " + (def != null ? def.name : itemId));
+        Sfx.Play("loot");
         Tutorial.Notify("pickup");
         var pc = PlayerController.Instance;
         if (pc != null && pc.OnStreet) Tutorial.Notify("loot");

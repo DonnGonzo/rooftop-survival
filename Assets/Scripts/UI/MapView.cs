@@ -93,6 +93,9 @@ public class MapView : MonoBehaviour
         foreach (var d in SpawnDirector.Dens)
             if (d.discovered) Mark(r, d.pos, d.danger ? new Color(1f, 0.35f, 0.3f) : new Color(0.5f, 0.9f, 0.5f), d.label, 7f);
 
+        if (FactionDirector.Current != null)
+            Mark(r, FactionDirector.Current.pos, Faction.StandingColor, "Drifter camp" + (FactionDirector.Current.UnderAttack ? " (under attack)" : ""), 9f);
+
         var p = PlayerController.Instance;
         if (p != null)
         {

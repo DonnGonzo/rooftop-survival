@@ -96,6 +96,8 @@ public class NightDirector : MonoBehaviour
         RaidActive = true;
         wavesDone = false;
         Hud.Banner("RAID! " + count + " creatures are climbing the building.", 6f);
+        Sfx.Play("raid_horn");
+        GameClock.WakeUp();
         StartCoroutine(SpawnWaves(night, count));
     }
 

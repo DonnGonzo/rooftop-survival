@@ -47,11 +47,23 @@ public class PlayerController : MonoBehaviour
         Instance = this;
         cc = GetComponent<CharacterController>();
         var c = Characters.Current;
-        maxHealth = c.maxHealth;
-        health = maxHealth;
         walkSpeed *= c.moveMult;
         sprintSpeed *= c.moveMult;
+        maxHealth = c.maxHealth;
+        health = maxHealth;
     }
+
+    void Start() { ApplyStats(false); health = maxHealth; }
+
+    /// <summary>Works out max health from the character and the points spent on vitality.</summary>
+    public void ApplyStats(bool keepWounds)
+    {
+        float before = maxHealth;
+        maxHealth = Characters.Current.maxHealth + Progress.Stat("vitality") * 10f;
+        if (keepWounds) health = Mathf.Min(maxHealth, health + Mathf.Max(0f, maxHealth - before));
+    }
+
+    float stepAt;
 
     void Update()
     {
@@ -66,23 +78,33 @@ public class PlayerController : MonoBehaviour
         var m = Inp.Move();
         if (m.magnitude > 0.5f) Tutorial.Notify("move");
         Vector3 dir = transform.right * m.x + transform.forward * m.y;
-        bool sprint = Inp.Sprint() && m.y > 0.1f;
+        var needs = Needs.Instance;
+        float load = Items.Load;
+        bool sprint = Inp.Sprint() && m.y > 0.1f && load <= 1f && (needs == null || needs.Stamina > 4f);
+        if (sprint && m.magnitude > 0.5f && needs != null) needs.Spend(11f * Time.deltaTime);
         float speed = sprint ? sprintSpeed : walkSpeed;
         if (m.y < -0.1f) speed *= 0.7f;   // backing up is slower
+        // Carrying more than you can: slower, and past 130% hardly moving at all.
+        if (load > 1.3f) speed *= 0.25f;
+        else if (load > 1f) speed *= Mathf.Lerp(0.75f, 0.45f, (load - 1f) / 0.3f);
 
         if (cc.isGrounded && velY < 0f) velY = -2f;
-        if (cc.isGrounded && Inp.Jump()) velY = jumpSpeed;
+        if (cc.isGrounded && Inp.Jump() && load <= 1.3f && (needs == null || needs.Spend(6f))) velY = jumpSpeed;
         velY += gravity * Time.deltaTime;
         cc.Move((dir * speed + Vector3.up * velY) * Time.deltaTime);
         HorizontalSpeed = new Vector2(cc.velocity.x, cc.velocity.z).magnitude;
         Sprinting = sprint && m.magnitude > 0.5f;
+        if (cc.isGrounded && HorizontalSpeed > 1.2f && Time.time > stepAt)
+        {
+            stepAt = Time.time + (Sprinting ? 0.31f : 0.48f);
+            Sfx.Play("footstep", Sprinting ? 0.5f : 0.35f);
+        }
 
         float y = transform.position.y;
         if (y < -12f && y > StreetBand) Die("You fell from the roof.");
         else if (y < StreetBuilder.StreetY - 10f) Die("You fell out of the world.");
 
-        var run = RunManager.Instance != null ? RunManager.Instance.Current : null;
-        bool fed = run == null || !run.hungry;
+        bool fed = needs == null || !needs.Weak;
         if (RoofZone.PlayerOnRoof && fed && health < maxHealth && !NightDirector.RaidActive)
             health = Mathf.Min(maxHealth, health + roofRegenPerSecond * Time.deltaTime);
 
@@ -147,7 +169,9 @@ public class PlayerController : MonoBehaviour
     public void TakeDamage(float amount, string source)
     {
         if (GameState.Frozen || health <= 0f || busy) return;
+        amount *= 1f - Items.Armor;
         health -= amount;
+        Sfx.Play("hurt");
         CameraFeel.Shake(Mathf.Clamp01(amount / 25f));
         Hud.Hurt();
         if (GameClock.Sleeping) GameClock.WakeUp();
@@ -210,12 +234,15 @@ public class PlayerController : MonoBehaviour
         if (AtRopeTop())
         {
             Tutorial.Notify("rappel");
+            Sfx.Play("rope");
             Vector3 land = foot + new Vector3(0f, 0.3f, 2.5f);
             StartCoroutine(Travel(new[] { top + Vector3.up * 1.2f, top, foot + Vector3.up * 0.4f, land },
                                   new[] { 0.5f, 0.4f, 4.5f, 0.5f }, "Rappelling down. Be back before dark."));
         }
         else if (AtRopeFoot())
         {
+            if (Items.Load > 1.3f) { Hud.Toast("You are carrying far too much to climb."); return; }
+            Sfx.Play("rope");
             Vector3 inside = RoofGenerator.AnchorPos + new Vector3(0f, 0.3f, -2.2f);
             StartCoroutine(Travel(new[] { foot + Vector3.up * 0.4f, top, top + Vector3.up * 1.2f, inside },
                                   new[] { 0.5f, 6f, 0.4f, 0.5f }, "Climbing...", () => Tutorial.Notify("roof")));

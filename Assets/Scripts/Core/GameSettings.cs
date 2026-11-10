@@ -19,6 +19,18 @@ public static class GameSettings
         }
     }
 
+    public static float MusicVolume
+    {
+        get => PlayerPrefs.GetFloat("set_music", 0.7f);
+        set => PlayerPrefs.SetFloat("set_music", value);
+    }
+
+    public static float SfxVolume
+    {
+        get => PlayerPrefs.GetFloat("set_sfx", 1f);
+        set => PlayerPrefs.SetFloat("set_sfx", value);
+    }
+
     public static bool InvertY
     {
         get => PlayerPrefs.GetInt("set_invy", 0) == 1;

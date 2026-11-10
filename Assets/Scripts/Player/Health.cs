@@ -10,6 +10,10 @@ public class Health : MonoBehaviour
     public float max = 35f;
     public string dropItem = "food";
     public int dropCount = 2;
+    public string dropItem2 = "";
+    public int dropCount2;
+    /// <summary>Optional name drawn above the bar (used for the Drifters).</summary>
+    public System.Func<string> label;
 
     [Tooltip("Show the bar when the player is within this many metres, even if nothing has hit it.")]
     public float barRange = 22f;
@@ -24,6 +28,8 @@ public class Health : MonoBehaviour
 
     /// <summary>Raised when this dies or breaks.</summary>
     public event System.Action OnDeath;
+    /// <summary>Raised on every hit, with what caused it.</summary>
+    public event System.Action<string> OnHurt;
 
     public float current;
     public bool Dead => current <= 0f;
@@ -37,6 +43,7 @@ public class Health : MonoBehaviour
         if (Dead) return;
         current -= amount;
         lastHitTime = Time.time;
+        OnHurt?.Invoke(source);
         if (Dead) Die();
     }
 
@@ -65,7 +72,14 @@ public class Health : MonoBehaviour
         GUI.color = Color.Lerp(new Color(0.85f, 0.15f, 0.12f), new Color(0.35f, 0.85f, 0.3f), frac);
         GUI.DrawTexture(new Rect(x - w / 2f, y, w * frac, h), tex);
         GUI.color = Color.white;
+        if (label != null)
+        {
+            if (tag == null) { tag = new GUIStyle(GUI.skin.label) { fontSize = 13, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold }; tag.normal.textColor = Color.white; }
+            GUI.Label(new Rect(x - 120f, y - 20f, 240f, 18f), label(), tag);
+        }
     }
+
+    static GUIStyle tag;
 
     bool BarVisible()
     {
@@ -86,6 +100,8 @@ public class Health : MonoBehaviour
         }
         if (dropCount > 0 && !string.IsNullOrEmpty(dropItem))
             Pickup.Create("loot-sack", dropItem, dropCount, null, transform.position + Vector3.up * 0.05f, 0.5f);
+        if (dropCount2 > 0 && !string.IsNullOrEmpty(dropItem2))
+            Pickup.Create("loot-sack", dropItem2, dropCount2, null, transform.position + new Vector3(0.6f, 0.05f, 0.3f), 0.45f);
         StartCoroutine(FallOver());
     }
 

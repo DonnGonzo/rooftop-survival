@@ -76,7 +76,9 @@ public static class ForestBuilder
         for (int n = 0; n < 70; n++)
         {
             Vector3 p = RandomPoint(rng);
-            if (Free(p, 1f)) StreetBuilder.Prop("wildflower-plant", p, (float)rng.NextDouble() * 360f, Mathf.Lerp(0.3f, 0.6f, (float)rng.NextDouble()), 0f, false, root);
+            if (!Free(p, 1f)) continue;
+            var fl = StreetBuilder.Prop("wildflower-plant", p, (float)rng.NextDouble() * 360f, Mathf.Lerp(0.35f, 0.6f, (float)rng.NextDouble()), 0f, false, root);
+            if (fl != null) { var hc = Container.Add(fl, "Pick herbs", 1.1f, 2, new LootRoll("herbs", 1, 2)); hc.range = 2.2f; hc.xp = 3; }
         }
 
         // Stone, ore, and fallen wood.
@@ -98,7 +100,7 @@ public static class ForestBuilder
             if (!Free(p, 2f)) continue;
             string key = n % 4 == 0 ? "bracket-fungus-log" : n % 4 == 1 ? "driftwood-log" : n % 4 == 2 ? "tree-stump" : "moss-covered-stump";
             var log = StreetBuilder.Prop(key, p, (float)rng.NextDouble() * 360f, 0f, Mathf.Lerp(0.9f, 2.4f, (float)rng.NextDouble()), true, root);
-            if (log != null) ResourceNode.Add(log, ResourceNode.Kind.Tree, 2, 4);
+            if (log != null) ResourceNode.Add(log, ResourceNode.Kind.Tree, 2, 5f);
         }
 
         Hills(rng);
@@ -188,7 +190,7 @@ public static class ForestBuilder
         }
         var dock = StreetBuilder.Prop("lake-dock-run", p + new Vector3(r - 2f, 0.05f, 0f), 90f, 0f, 6f, true, root);
         GameObject fill = dock != null ? dock : water;
-        var c = Container.Add(fill, "Fill your bottles at the lake", 2.5f, 1, new LootRoll("water", 4, 6));
+        var c = Container.Add(fill, "Fill your bottles at the lake", 2.5f, 1, new LootRoll("dirty_water", 4, 6));
         c.range = dock != null ? 5f : r + 2f;
 
         SpawnDirector.Add(p + new Vector3(-r - 3f, 0f, 0f), "Lake shore", false, 4, false, "frog-base", 1, "forest-deer", 1);

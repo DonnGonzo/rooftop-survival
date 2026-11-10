@@ -13,16 +13,17 @@ public class ResourceNode : MonoBehaviour
 
     public Kind kind;
     public int hitsLeft = 4;
-    public int regrowDays = 3;        // 0 = never comes back (wrecks)
-    int fullHits, goneOnDay = -1;
+    public float regrowSeconds = 240f; // 0 = never comes back (wrecks)
+    int fullHits;
     Vector3 baseScale;
     Collider col;
     Renderer[] rends;
 
-    public static ResourceNode Add(GameObject go, Kind kind, int hits, int regrowDays)
+    /// <summary>regrowMinutes: how long after it is used up it comes back (0 = never).</summary>
+    public static ResourceNode Add(GameObject go, Kind kind, int hits, float regrowMinutes)
     {
         var n = go.AddComponent<ResourceNode>();
-        n.kind = kind; n.hitsLeft = hits; n.fullHits = hits; n.regrowDays = regrowDays;
+        n.kind = kind; n.hitsLeft = hits; n.fullHits = hits; n.regrowSeconds = regrowMinutes * 60f;
         return n;
     }
 
@@ -31,9 +32,6 @@ public class ResourceNode : MonoBehaviour
         baseScale = transform.localScale;
         col = GetComponent<Collider>();
     }
-
-    void OnEnable() { GameClock.OnDawn += Dawn; }
-    void OnDisable() { GameClock.OnDawn -= Dawn; }
 
     public bool Spent => hitsLeft <= 0;
 
@@ -76,6 +74,7 @@ public class ResourceNode : MonoBehaviour
             }
         }
         hitsLeft--;
+        Sfx.PlayAt(kind == Kind.Tree ? "chop" : kind == Kind.Wreck ? "metal" : "rock", transform.position + Vector3.up, 1f, 30f);
         Progress.Gain(2);
         Tutorial.Notify("gather");
         StartCoroutine(Shake());
@@ -101,6 +100,7 @@ public class ResourceNode : MonoBehaviour
     {
         if (col != null) col.enabled = false;
         if (kind == Kind.Wreck) { Hud.Toast("Stripped bare."); yield break; }   // the shell stays
+        if (kind == Kind.Tree) Sfx.PlayAt("tree_fall", transform.position, 1f, 45f);
 
         Quaternion a = transform.localRotation;
         Quaternion b = kind == Kind.Tree ? a * Quaternion.Euler(86f, 0f, 0f) : a;
@@ -116,16 +116,13 @@ public class ResourceNode : MonoBehaviour
         rends = GetComponentsInChildren<Renderer>();
         foreach (var r in rends) r.enabled = false;
         transform.localRotation = a;
-        goneOnDay = GameClock.Instance != null ? GameClock.Instance.Day : 0;
-    }
 
-    void Dawn(int day)
-    {
-        if (!Spent || regrowDays <= 0 || goneOnDay < 0 || day - goneOnDay < regrowDays) return;
+        // It grows back after a few minutes.
+        if (regrowSeconds <= 0f) yield break;
+        yield return new WaitForSeconds(regrowSeconds);
         hitsLeft = fullHits;
-        goneOnDay = -1;
         transform.localScale = baseScale;
-        if (rends != null) foreach (var r in rends) if (r != null) r.enabled = true;
+        foreach (var r in rends) if (r != null) r.enabled = true;
         if (col != null) col.enabled = true;
     }
 }
@@ -152,6 +149,8 @@ public class Container : Interactable
     public int xp = 4;
     /// <summary>Called when it is emptied (used to remember roof caches across saves).</summary>
     public System.Action onEmptied;
+    /// <summary>Called every time it is searched (the Drifters mind you going through their things).</summary>
+    public System.Action onSearched;
     /// <summary>Optional part hidden while empty (berries on a bush).</summary>
     public GameObject fullVisual;
 
@@ -192,6 +191,8 @@ public class Container : Interactable
             }
         }
         Hud.Toast(sb.Length > 0 ? sb.ToString() : "Nothing useful.");
+        Sfx.Play(sb.Length > 0 ? "loot" : "search");
+        onSearched?.Invoke();
         Progress.Gain(xp);
         Tutorial.Notify("search");
         SetEmpty();

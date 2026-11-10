@@ -57,3 +57,9 @@ tall pine tree, young pine, oak tree, broadleaf oak, birch tree, maple tree, fro
 ## Made for this game
 
 The `rs-*` models (spike trap, snare, nail club, rope anchor, stair hut, doorway, barricade, medkit) were built for this project with `Tools/make_props.py` (Blender). No third-party content.
+
+Added later from Polyfork (polyfork.dev, CC BY 4.0): hospital-nurse-base, shopper-base, audience-gentleman-base, teen-audience-member-base, reed-fire-torch, torch-stake, iron-ingot, ingot-stack, charred-meat-haunch, hand-lantern, kit-bag, steel-helmet, heater-shield, dome-tent, campfire-cooking-grate, laced-hide-stretching-rack, flag-pole, cow-base, horse-base, duck-base, pack-mule-base, cemetery-lantern-post, string-bow.
+
+## Supplied by the project owner (personal use only)
+
+`drifter-kim`, `drifter-jill`, `drifter-lara` and the `wp-*` weapons were converted from model packs supplied by the project owner with `Tools/characters/`. The three characters are fan models of characters owned by ZA/UM, Capcom and Crystal Dynamics / Epic Games; the Jill model is marked "free for personal use only". They are not licensed for redistribution or sale: replace them before publishing a build or making the repository public. Without the `drifter-*` files the game falls back to the Polyfork civilians.

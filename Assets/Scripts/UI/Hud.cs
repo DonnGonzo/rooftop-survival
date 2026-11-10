@@ -18,7 +18,7 @@ public class Hud : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     static void ResetStatics() { toast = ""; banner = ""; toastUntil = 0f; bannerUntil = 0f; hurtAt = -10f; }
 
-    GUIStyle big, mid, small, centre, centreBig, key;
+    GUIStyle big, mid, small, centre, centreBig, key, tiny;
     Texture2D white;
     float startedAt = -1f;
 
@@ -59,6 +59,8 @@ public class Hud : MonoBehaviour
         key = new GUIStyle(GUI.skin.label) { fontSize = 15, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
         foreach (var s in new[] { big, mid, small, centre, centreBig }) s.normal.textColor = Color.white;
         key.normal.textColor = new Color(0.1f, 0.1f, 0.1f);
+        tiny = new GUIStyle(GUI.skin.label) { fontSize = 12 };
+        tiny.normal.textColor = new Color(0.9f, 0.9f, 0.9f);
     }
 
     void Panel(Rect r, float alpha = 0.55f)
@@ -74,6 +76,12 @@ public class Hud : MonoBehaviour
         GUI.color = fill;
         GUI.DrawTexture(new Rect(r.x + 2, r.y + 2, (r.width - 4) * Mathf.Clamp01(frac), r.height - 4), white);
         GUI.color = Color.white;
+    }
+
+    void Need(float y, string name, float frac, Color c)
+    {
+        GUI.Label(new Rect(24, y - 3, 70, 18), name, tiny);
+        Bar(new Rect(84, y + 2, 184, 10), frac, c);
     }
 
     /// <summary>A key cap followed by what it does, centred on x. Returns the width used.</summary>
@@ -99,6 +107,20 @@ public class Hud : MonoBehaviour
         if (clock == null || run == null || !GameState.Playing || GameState.MenuOpen || MapView.Showing) return;
         Styles();
         float W = Screen.width, H = Screen.height;
+
+        // With the inventory window up, only short messages show; the rest would sit on top of it.
+        if (GameState.UiOpen)
+        {
+            if (Time.unscaledTime < toastUntil)
+            {
+                float tw0 = Mathf.Min(W - 80f, centre.CalcSize(new GUIContent(toast)).x + 40f);
+                float wh0 = Mathf.Min(640f, H - 40f), ww0 = Mathf.Min(1060f, W - 40f);
+                var tr0 = new Rect((W + ww0) / 2f - tw0 - 16f, (H + wh0) / 2f - 50f, tw0, 30f);
+                Panel(tr0, 0.85f);
+                GUI.Label(tr0, toast, centre);
+            }
+            return;
+        }
 
         // Hurt flash
         float hurt = 1f - Mathf.Clamp01((Time.unscaledTime - hurtAt) / 0.5f);
@@ -134,20 +156,14 @@ public class Hud : MonoBehaviour
         // ---- top right: supplies
         var sb = new StringBuilder();
         sb.Append("Food ").Append(run.food).Append("    Water ").Append(run.water)
-          .Append("    Wood ").Append(run.wood).Append("    Scrap ").Append(run.scrap);
-        foreach (var d in Items.Defs)
-        {
-            if (d.id == "food" || d.id == "water" || d.id == "wood" || d.id == "scrap") continue;
-            if (Items.Weapon(d.id) != null) continue;
-            int n = Items.Count(d.id);
-            if (n > 0) sb.Append("    ").Append(d.name).Append(' ').Append(n);
-        }
+          .Append("    Wood ").Append(run.wood).Append("    Scrap ").Append(run.scrap)
+          .Append("    Pack ").Append(Items.CarriedWeight.ToString("0")).Append(" / ").Append(Items.Capacity.ToString("0")).Append(" kg");
         string supplies = sb.ToString();
         float sw = Mathf.Min(W - 340f, mid.CalcSize(new GUIContent(supplies)).x + 28f);
         Panel(new Rect(W - sw - 12, 12, sw, 54));
         GUI.Label(new Rect(W - sw, 16, sw - 12, 24), supplies, mid);
         GUI.Label(new Rect(W - sw, 38, sw - 12, 22), "Base defense " + BaseStructure.TotalDefense().ToString("F0")
-                  + (run.hungry ? "    HUNGRY: no healing today" : ""), small);
+                  + "      Drifters: " + Faction.Standing, small);
 
         // ---- level
         Panel(new Rect(12, 90, 300, 26));
@@ -168,16 +184,16 @@ public class Hud : MonoBehaviour
         // ---- raid
         if (NightDirector.RaidActive)
         {
-            Panel(new Rect(W / 2f - 170, 12, 340, 40), 0.7f);
+            Panel(new Rect(W / 2f - 170, 74, 340, 40), 0.7f);
             GUI.color = new Color(1f, 0.45f, 0.35f);
-            GUI.Label(new Rect(W / 2f - 170, 12, 340, 40), "RAID  -  " + NightDirector.RaidersLeft + " on the roof", centreBig);
+            GUI.Label(new Rect(W / 2f - 170, 74, 340, 40), "RAID  -  " + NightDirector.RaidersLeft + " on the roof", centreBig);
             GUI.color = Color.white;
         }
         else if (!clock.IsNight && clock.Hour >= clock.warningHour && player != null && player.OnStreet)
         {
-            Panel(new Rect(W / 2f - 230, 12, 460, 36), 0.7f);
+            Panel(new Rect(W / 2f - 230, 74, 460, 36), 0.7f);
             GUI.color = new Color(1f, 0.8f, 0.4f);
-            GUI.Label(new Rect(W / 2f - 230, 12, 460, 36), "Night is coming. Get back up the rope.", centre);
+            GUI.Label(new Rect(W / 2f - 230, 74, 460, 36), "Night is coming. Get back up the rope.", centre);
             GUI.color = Color.white;
         }
 
@@ -185,8 +201,9 @@ public class Hud : MonoBehaviour
         if (Time.unscaledTime < bannerUntil)
         {
             float bw = Mathf.Min(W - 80f, 760f);
-            Panel(new Rect(W / 2f - bw / 2f, H * 0.2f, bw, 64), 0.72f);
-            GUI.Label(new Rect(W / 2f - bw / 2f + 12, H * 0.2f, bw - 24, 64), banner, centreBig);
+            float bh = centre.CalcHeight(new GUIContent(banner), bw - 24) + 22f;
+            Panel(new Rect(W / 2f - bw / 2f, H * 0.2f, bw, bh), 0.72f);
+            GUI.Label(new Rect(W / 2f - bw / 2f + 12, H * 0.2f, bw - 24, bh), banner, centre);
         }
 
         // ---- bottom left: health and weapon
@@ -195,6 +212,18 @@ public class Hud : MonoBehaviour
             float frac = player.health / player.maxHealth;
             Bar(new Rect(16, H - 46, 260, 24), frac, Color.Lerp(new Color(0.8f, 0.15f, 0.12f), new Color(0.3f, 0.75f, 0.3f), frac));
             GUI.Label(new Rect(24, H - 46, 250, 24), "Health " + Mathf.CeilToInt(player.health) + " / " + player.maxHealth.ToString("F0"), small);
+
+            // Needs: stamina, hunger, thirst, and how loaded you are.
+            var needs = Needs.Instance;
+            if (needs != null)
+            {
+                Panel(new Rect(16, H - 148, 260, 66));
+                Need(H - 144, "Stamina", needs.Stamina / needs.MaxStamina, new Color(0.85f, 0.85f, 0.4f));
+                Need(H - 128, "Hunger", needs.Hunger / 100f, needs.Hunger < 20f ? new Color(0.95f, 0.35f, 0.3f) : new Color(0.9f, 0.65f, 0.3f));
+                Need(H - 112, "Thirst", needs.Thirst / 100f, needs.Thirst < 20f ? new Color(0.95f, 0.35f, 0.3f) : new Color(0.4f, 0.7f, 0.95f));
+                float load = Items.Load;
+                Need(H - 96, "Load", load / 1.3f, load > 1f ? new Color(0.95f, 0.35f, 0.3f) : new Color(0.7f, 0.7f, 0.72f));
+            }
 
             var wp = Items.Equipped;
             string weapon = wp != null ? Items.Def(wp.id).name : "Fists";
@@ -214,7 +243,7 @@ public class Hud : MonoBehaviour
         GUI.color = Color.white;
 
         // ---- what the keys do right here
-        float py = H - 150f;
+        float py = H - 190f;
         if (player != null && !GameClock.Sleeping)
         {
             if (!string.IsNullOrEmpty(player.Prompt))

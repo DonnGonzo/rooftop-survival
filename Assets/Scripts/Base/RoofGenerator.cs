@@ -197,6 +197,9 @@ public class RoofGenerator : MonoBehaviour
         {
             ModelLibrary.PlayClip(fire, "tick");
             fire.AddComponent<FireFlicker>();
+            var cook = fire.AddComponent<CraftStation>();
+            cook.kind = "campfire";
+            cook.range = 2.6f;
         }
         used.Add(new Vector3(fx, fz, 1.5f));
 
@@ -217,6 +220,7 @@ public class RoofGenerator : MonoBehaviour
         {
             if (NightDirector.RaidActive) { Hud.Toast("Not with those things on the roof."); return; }
             GameClock.Sleep();
+            Sfx.Play("sleep");
             Tutorial.Notify("sleep");
         });
         used.Add(new Vector3(cotPos.x, cotPos.z, 1.4f));
@@ -249,7 +253,8 @@ public class RoofGenerator : MonoBehaviour
             if (c == null || run.waterDay == c.Day) { Hud.Toast("The tank refills overnight."); return; }
             run.waterDay = c.Day;
             Items.Add("water", WaterPerDay(run));
-            Hud.Toast("+" + WaterPerDay(run) + " Water");
+            Sfx.Play("drink");
+            Hud.Toast("+" + WaterPerDay(run) + " Clean water");
         });
     }
 

@@ -173,7 +173,11 @@ public class MeleeCombat : MonoBehaviour
 
         float speed = weapon != null ? weapon.speed : 1f;
         float dur = s.dur / speed;
-        float dmg = (weapon != null ? weapon.damage : fistDamage) * s.mult * Characters.Current.damageMult;
+        float dmg = (weapon != null ? weapon.damage : fistDamage) * s.mult * Characters.Current.damageMult * Progress.DamageMult;
+        // A strike costs stamina; thrown with none left it has little behind it.
+        var needs = Needs.Instance;
+        if (needs != null && !needs.Spend(heavy ? 14f : 6f)) dmg *= 0.55f;
+        Sfx.Play("swing", heavy ? 0.9f : 0.6f);
         float reach = weapon != null ? weapon.reach : fistReach;
 
         busyUntil = now + dur * 0.92f;   // the next strike may start just before this one has fully settled
@@ -278,6 +282,7 @@ public class MeleeCombat : MonoBehaviour
                 if (h.Dead || hitHealth.Contains(h) || h.GetComponent<BaseStructure>() != null) continue;   // not your own builds
                 hitHealth.Add(h);
                 h.TakeDamage(dmg, heavy ? "heavy strike" : "strike");
+                Sfx.PlayAt(weapon == null ? "punch" : "hit_flesh", h.transform.position + Vector3.up, 1f, 25f);
                 if (h.Dead) Progress.Gain(Mathf.Max(3, Mathf.RoundToInt(h.max / 5f)));
                 landed = true;
                 continue;
@@ -342,6 +347,15 @@ public class MeleeCombat : MonoBehaviour
         weaponModel.transform.localRotation = rot;
         weaponModel.transform.localPosition = -(rot * (foot * scale)) - Quaternion.Euler(want.euler) * new Vector3(0f, want.grip, 0f);
         foreach (var c in weaponModel.GetComponentsInChildren<Collider>()) Destroy(c);
+        if (want.light)
+        {
+            var lg = new GameObject("TorchLight");
+            lg.transform.SetParent(weaponModel.transform, false);
+            lg.transform.position = RightTarget.position + RightTarget.up * want.length * 0.9f;
+            var l = lg.AddComponent<Light>();
+            l.type = LightType.Point; l.range = 16f; l.intensity = 1.6f; l.color = new Color(1f, 0.7f, 0.4f);
+            lg.AddComponent<FireFlickerLight>();
+        }
         RightTarget.localRotation = Quaternion.Euler(RestRot);
     }
 }
