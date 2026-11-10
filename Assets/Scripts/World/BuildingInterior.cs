@@ -11,6 +11,9 @@ public static class BuildingInterior
 {
     public enum Kind { Home, Shop, Office, Garage, Diner }
 
+    /// <summary>How many buildings got a real doorway cut, and how many had no wall in the way (set-back fronts).</summary>
+    public static int Cuts, Uncut;
+
     const float Height = 3.4f, Wall = 0.25f, DoorW = 2.4f, DoorH = 2.7f;
 
     /// <summary>One furniture model: how to size it and what a search of it can give.</summary>
@@ -86,7 +89,7 @@ public static class BuildingInterior
     /// centre: the middle of the building at street level. hx, hz: half its footprint.
     /// side: which face has the door (0 = +x, 1 = -x, 2 = +z, 3 = -z).
     /// </summary>
-    public static void Build(Transform parent, Vector3 centre, float hx, float hz, int side, Kind kind, System.Random rng)
+    public static void Build(Transform parent, Vector3 centre, float hx, float hz, int side, Kind kind, System.Random rng, GameObject shell = null)
     {
         var outer = new GameObject("Interior_" + kind).transform;
         outer.SetParent(parent, false);
@@ -135,6 +138,12 @@ public static class BuildingInterior
         Face(root, new Vector3(-(DoorW / 2f + sideW / 2f), Height / 2f, iz), new Vector2(sideW, Height), Vector3.back, wallMat);
         Face(root, new Vector3(DoorW / 2f + sideW / 2f, Height / 2f, iz), new Vector2(sideW, Height), Vector3.back, wallMat);
         Face(root, new Vector3(0f, DoorH + (Height - DoorH) / 2f, iz), new Vector2(DoorW, Height - DoorH), Vector3.back, wallMat);
+        // The same wall seen from the street. On most buildings the model's own front hides it; where the
+        // model's front is set back under a canopy (and so was cleared out of the room) this is the shopfront.
+        var frontMat = Look.Mat("concrete", new Color(0.5f, 0.5f, 0.52f), 3f);
+        Face(root, new Vector3(-(DoorW / 2f + sideW / 2f), Height / 2f, iz + 0.02f), new Vector2(sideW, Height), Vector3.forward, frontMat);
+        Face(root, new Vector3(DoorW / 2f + sideW / 2f, Height / 2f, iz + 0.02f), new Vector2(sideW, Height), Vector3.forward, frontMat);
+        Face(root, new Vector3(0f, DoorH + (Height - DoorH) / 2f, iz + 0.02f), new Vector2(DoorW, Height - DoorH), Vector3.forward, frontMat);
         // Door reveal: the short passage through the wall thickness.
         Face(root, new Vector3(-DoorW / 2f, DoorH / 2f, iz + inset / 2f), new Vector2(inset, DoorH), Vector3.right, wallMat);
         Face(root, new Vector3(DoorW / 2f, DoorH / 2f, iz + inset / 2f), new Vector2(inset, DoorH), Vector3.left, wallMat);
@@ -153,16 +162,23 @@ public static class BuildingInterior
         Look.Box("SkirtLeft", root, new Vector3(-ix + 0.03f, 0.12f, 0f), new Vector3(0.05f, 0.14f, iz * 2f), trim, false);
         Look.Box("SkirtRight", root, new Vector3(ix - 0.03f, 0.12f, 0f), new Vector3(0.05f, 0.14f, iz * 2f), trim, false);
 
-        // The way in: a frame against the outer face, and a dark panel so the wall reads as an open doorway.
-        ModelLibrary.Spawn("rs-doorway", root, new Vector3(0f, 0f, iz + inset + 0.3f), 0f, fitHeight: 3.9f, keepAnimations: false);
-        var voidPanel = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        voidPanel.name = "DoorDark";
-        Object.Destroy(voidPanel.GetComponent<Collider>());
-        voidPanel.transform.SetParent(root, false);
-        voidPanel.transform.localPosition = new Vector3(0f, DoorH / 2f, iz + inset + 0.22f);
-        voidPanel.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);   // faces the street; unseen from inside
-        voidPanel.transform.localScale = new Vector3(DoorW, DoorH, 1f);
-        Look.Glow(voidPanel, new Color(0.02f, 0.02f, 0.025f));
+        // The way in: a frame against the outer face, and a pair of doors in the wall that open and shut.
+        ModelLibrary.Spawn("rs-doorway", root, new Vector3(0f, 0f, iz + inset + 0.3f), 0f, fitHeight: 3.35f, keepAnimations: false);
+        // The doors hang in the frame, and a matching hole is cut through the building model behind them,
+        // so from the street you look straight into the room.
+        Door.Build(root, new Vector3(0f, 0f, iz + inset + 0.26f), DoorW, DoorH, kind == Kind.Garage, rng);
+        int cut = 0;
+        if (shell != null)
+        {
+            var hole = new Bounds();
+            hole.SetMinMax(new Vector3(-DoorW / 2f, -0.5f, iz - 0.05f), new Vector3(DoorW / 2f, DoorH, iz + inset + 1.6f));
+            cut = MeshCutter.CutBox(shell, root.worldToLocalMatrix, hole);
+            // Nothing of the model belongs inside the room either (set-back walls, pillars, signs).
+            var room = new Bounds();
+            room.SetMinMax(new Vector3(-ix + 0.02f, 0.05f, -iz + 0.02f), new Vector3(ix - 0.02f, Height - 0.02f, iz - 0.02f));
+            MeshCutter.CutBox(shell, root.worldToLocalMatrix, room);
+        }
+        Cuts += cut > 0 ? 1 : 0; Uncut += cut > 0 ? 0 : 1;
 
         // Light: panels on the ceiling, and one lamp that only burns while you are near (many would be too costly).
         int lx = Mathf.Clamp(Mathf.RoundToInt(ix / 3.5f), 1, 2), lz = Mathf.Clamp(Mathf.RoundToInt(iz / 3.5f), 1, 2);

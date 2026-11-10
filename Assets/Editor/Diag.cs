@@ -127,6 +127,19 @@ public static class Diag
         foreach (var r in Items.Recipes) if (r.output == id.Trim()) return "order " + st.PlaceOrder(r);
         return "no recipe";
     }
+    /// <summary>"go": stand 3 m outside the nearest street door, facing it. "use": open or close it.</summary>
+    public static string Door(string a)
+    {
+        var pc = PlayerController.Instance; global::Door best = null; float bd = 1e9f;
+        foreach (var d in Object.FindObjectsByType<global::Door>()) { float q = (d.transform.position - pc.transform.position).sqrMagnitude; if (q < bd) { bd = q; best = d; } }
+        if (best == null) return "no door";
+        if (a.Trim() == "use") { best.Use(); return "open=" + best.Open; }
+        Vector3 p = best.transform.position + best.transform.forward * (a.Trim() == "in" ? -2.2f : 2.2f) + Vector3.up * 0.4f;
+        Tele(p.x.ToString(CultureInfo.InvariantCulture) + "," + p.y.ToString(CultureInfo.InvariantCulture) + "," + p.z.ToString(CultureInfo.InvariantCulture));
+        pc.transform.rotation = Quaternion.LookRotation(a.Trim() == "in" ? best.transform.forward : -best.transform.forward);
+        return "door " + best.transform.position.ToString("F0") + " open=" + best.Open;
+    }
+    public static string Cuts() { return "cut=" + BuildingInterior.Cuts + " uncut=" + BuildingInterior.Uncut; }
     public static string Map() { MapView.Toggle(); return "map " + MapView.Showing; }
     public static string SleepNow() { GameClock.Sleep(); return "sleeping"; }
     /// <summary>Moves the player next to the nearest object of a kind: tree, rock, wreck, container, animal.</summary>

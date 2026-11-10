@@ -91,6 +91,8 @@ static class Synth
             case "swing": return Noise(name, 0.2f, 0.25f, 0.6f, true);
             case "punch": case "hit_flesh": return Thump(name, 0.16f, 110f, 0.7f);
             case "hurt": return Thump(name, 0.22f, 80f, 0.8f);
+            case "door_open": return Tones(name, 0.38f, 0.3f, 180f, 265f);
+            case "door_close": return Thump(name, 0.22f, 95f, 0.8f);
             case "place": return Thump(name, 0.25f, 70f, 0.8f);
             case "footstep": return Thump(name, 0.07f, 120f, 0.35f);
             case "chop": return Thump(name, 0.12f, 240f, 0.7f);

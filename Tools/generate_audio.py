@@ -47,6 +47,8 @@ SFX = {
     "bite": ("an animal snapping its jaws in a quick vicious bite", 0.7),
     "death_animal": ("an animal's short dying yelp followed by a body falling", 1.2),
     "raid_horn": ("an ominous low horn blast mixed with distant monstrous screeches, alarm, danger arriving", 4.0),
+    "door_open": ("a heavy shop door being pushed open with a short hinge creak", 1.0),
+    "door_close": ("a heavy double door swinging shut with a solid thud", 0.9),
     "rope": ("a rope sliding fast through a metal ring, rappelling zip", 1.5),
     "sleep": ("a slow tired exhale and a sleeping bag rustling", 2.0),
     "dawn": ("a rooster-free quiet dawn: soft birdsong swelling with a gentle warm tone", 3.0),

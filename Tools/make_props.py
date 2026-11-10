@@ -184,8 +184,6 @@ def doorway():
     box((1.4, 0.06, 0.4), (0, 0.27, h + 0.2), m=mat("sign", (0.8, 0.75, 0.6)))
     box((0.5, 0.06, 0.1), (-0.3, 0.3, h + 0.2), m=DARK())
     box((0.3, 0.06, 0.1), (0.35, 0.3, h + 0.2), m=DARK())
-    # hanging broken door leaf
-    box((1.2, 0.07, 2.5), (w/2 - 0.1, 0.62, 1.5), (0, 0, 1.15), PAINT())
     export("rs-doorway")
 
 # ---- barricade: plank wall on braces with spikes on top ----

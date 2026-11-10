@@ -39,6 +39,7 @@ public static class StreetBuilder
 
     public static void Build(int seed)
     {
+        BuildingInterior.Cuts = 0; BuildingInterior.Uncut = 0;
         buildings = 0;
         subways = 0;
         try
@@ -293,7 +294,7 @@ public static class StreetBuilder
         bool turned = Mathf.Abs(Mathf.Round(yaw / 90f) % 2) == 1;
         float hx = (turned ? lb.size.z : lb.size.x) * s / 2f;
         float hz = (turned ? lb.size.x : lb.size.z) * s / 2f;
-        BuildingInterior.Build(city, pos, hx, hz, side, BuildingInterior.KindFor(key), rng);
+        BuildingInterior.Build(city, pos, hx, hz, side, BuildingInterior.KindFor(key), rng, b);
 
         // A subway mouth by some tall buildings: where the night things come up.
         if (tall && subways < 2 && rng.NextDouble() < 0.1)
