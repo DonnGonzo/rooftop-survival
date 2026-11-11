@@ -116,9 +116,26 @@ public class PlayerBody : MonoBehaviour
     string current = "";
     float turnUntil;
 
-    void Start()
+    string spawnedKey = "";
+    /// <summary>The model key of the body currently on the player.</summary>
+    public string ModelKey => spawnedKey;
+
+    void Start() { Spawn(); }
+
+    /// <summary>
+    /// Builds the body for the character chosen now. Called at start, and again whenever the chosen
+    /// character differs from the one on screen (the menu can change it after the player already exists).
+    /// </summary>
+    void Spawn()
     {
+        if (model != null) Destroy(model);
+        if (shadowTwin != null) Destroy(shadowTwin);
+        model = null; shadowTwin = null; anim = null; headBone = null; hips = null; chest = null;
+        bones = null; twinBones = null; rArm = rFore = rHand = lArm = lFore = lHand = null;
+        rightHand = leftHand = null; headParts.Clear(); current = "";
+
         string key = Characters.Current.modelKey;
+        spawnedKey = key;
         model = ModelLibrary.Spawn(key, transform, Vector3.zero, yawOffset, fitHeight: height, keepAnimations: true);
         if (model == null)
         {
@@ -157,6 +174,7 @@ public class PlayerBody : MonoBehaviour
 
     void Update()
     {
+        if (Characters.Current.modelKey != spawnedKey) Spawn();
         if (GameState.Frozen) return;
 
         if (Inp.ToggleView()) SetThirdPerson(!thirdPerson);

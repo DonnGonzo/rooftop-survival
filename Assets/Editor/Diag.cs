@@ -265,7 +265,7 @@ public static class Diag
         var body = Object.FindAnyObjectByType<PlayerBody>();
         if (body == null) return "no PlayerBody";
         var pc = PlayerController.Instance;
-        sb.AppendLine("character=" + Characters.Current.modelKey + " frozen=" + GameState.Frozen + " pos=" + pc.transform.position + " speed=" + pc.HorizontalSpeed.ToString("F1") + " grounded=" + pc.Grounded);
+        sb.AppendLine("body=" + Object.FindAnyObjectByType<PlayerBody>()?.ModelKey + " character=" + Characters.Current.modelKey + " frozen=" + GameState.Frozen + " pos=" + pc.transform.position + " speed=" + pc.HorizontalSpeed.ToString("F1") + " grounded=" + pc.Grounded);
         foreach (var a in body.GetComponentsInChildren<Animation>(true))
         {
             sb.Append("Animation enabled=" + a.enabled + " playing=" + a.isPlaying + " clips=" + a.GetClipCount() + ":");
